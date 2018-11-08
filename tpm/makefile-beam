@@ -1,0 +1,122 @@
+#################################################################################
+#										#
+#			   	TPM 2.0 makefile - Linux, to run beam		#
+#			     Written by Ken Goldman				#
+#		       IBM Thomas J. Watson Research Center			#
+#	      $Id: makefile-beam 202 2015-04-02 13:49:05Z kgoldman $		#
+#										#
+#			       IBM Confidential					#
+#			     OCO Source Materials				#
+#			 (c) Copyright IBM Corp. 2010				#
+#			      All Rights Reserved			        #
+#										#
+#	   The source code for this program is not published or otherwise	#
+#	   divested of its trade secrets, irrespective of what has been		#
+#	   deposited with the U.S. Copyright Office.				#
+#										#
+#################################################################################
+
+BEAM_OPTIONS = 
+
+CCFLAGS = -Wall  			\
+	-Wmissing-declarations -Wmissing-prototypes -Wnested-externs \
+	 -c -ggdb -O0 	\
+	-DTPM_BITFIELD_LE		\
+	-DTPM_POSIX			\
+	-DSPEC_VERSION=122		\
+	-Ic:/progra~1/openssl/include	\
+	-I.
+
+beam_targets = \
+	AlgorithmCap.berr		\
+	AsymmetricCommands.berr		\
+	Attest_spt.berr			\
+	AttestationCommands.berr	\
+	AuditCommands.berr		\
+	Bits.berr			\
+	Cancel.berr			\
+	CapabilityCommands.berr		\
+	Clock.berr			\
+	ClockCommands.berr		\
+	CommandAudit.berr		\
+	CommandCodeAttributes.berr	\
+	CommandDispatcher.berr		\
+	Commands.berr			\
+	ContextCommands.berr		\
+	Context_spt.berr		\
+	CpriCryptPri.berr		\
+	CpriDataEcc.berr		\
+	CpriECC.berr			\
+	CpriHash.berr			\
+	CpriHashData.berr		\
+	CpriMisc.berr			\
+	CpriRNG.berr			\
+	CpriRSA.berr			\
+	CpriSym.berr			\
+	CryptSelfTest.berr		\
+	CryptUtil.berr			\
+	DA.berr				\
+	DRTM.berr			\
+	DictionaryCommands.berr		\
+	DuplicationCommands.berr	\
+	EACommands.berr			\
+	Entity.berr			\
+	Entropy.berr			\
+	EphemeralCommands.berr		\
+	ExecCommand.berr		\
+	Global.berr			\
+	Handle.berr			\
+	HandleProcess.berr		\
+	HashCommands.berr		\
+	Hierarchy.berr			\
+	HierarchyCommands.berr		\
+	IntegrityCommands.berr		\
+	Locality.berr			\
+	LocalityPlat.berr		\
+	ManagementCommands.berr		\
+	Manufacture.berr		\
+	Marshal.berr			\
+	MathFunctions.berr		\
+	MemoryLib.berr			\
+	NV.berr				\
+	NVCommands.berr			\
+	NVMem.berr			\
+	NV_spt.berr			\
+	Object.berr			\
+	ObjectCommands.berr		\
+	Object_spt.berr			\
+	PCR.berr			\
+	PP.berr				\
+	PPPlat.berr			\
+	PlatformData.berr		\
+	Policy_spt.berr			\
+	Power.berr			\
+	PowerPlat.berr			\
+	PropertyCap.berr		\
+	RSAData.berr			\
+	RSAKeySieve.berr		\
+	RandomCommands.berr		\
+	Session.berr			\
+	SessionCommands.berr		\
+	SessionProcess.berr		\
+	SigningCommands.berr		\
+	StartupCommands.berr		\
+	SymmetricCommands.berr		\
+	TPMCmdp.berr			\
+	TPMCmds.berr			\
+	TcpServerPosix.berr		\
+	TestingCommands.berr		\
+	Ticket.berr			\
+	Time.berr			\
+	TpmFail.berr			\
+	Unique.berr			\
+	Unmarshal.berr
+
+all:	$(beam_targets)
+
+$(beam_targets): %.berr : %.c
+	beam_compile --beam::prefixcc gcc -c $< \
+	$(CCFLAGS) $(BEAM_OPTIONS) > $@
+
+clean:
+	rm tpm_*.beam tpm_*.berr
