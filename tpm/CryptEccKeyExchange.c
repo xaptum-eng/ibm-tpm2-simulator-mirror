@@ -3,7 +3,7 @@
 /*	Functions that are used for the two-phase, ECC, key-exchange protocols	*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: CryptEccKeyExchange.c 1311 2018-08-23 21:39:29Z kgoldman $	*/
+/*            $Id: CryptEccKeyExchange.c 1594 2020-03-26 22:15:48Z kgoldman $	*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -61,6 +61,17 @@
 
 /* 10.2.11 CryptEccKeyExchange.c */
 #include "Tpm.h"
+
+LIB_EXPORT TPM_RC
+SM2KeyExchange(
+	       TPMS_ECC_POINT        *outZ,         // OUT: the computed point
+	       TPM_ECC_CURVE          curveId,      // IN: the curve for the computations
+	       TPM2B_ECC_PARAMETER   *dsAIn,        // IN: static private TPM key
+	       TPM2B_ECC_PARAMETER   *deAIn,        // IN: ephemeral private TPM key
+	       TPMS_ECC_POINT        *QsBIn,        // IN: static public party B key
+	       TPMS_ECC_POINT        *QeBIn         // IN: ephemeral public party B key
+	       );
+
 #if CC_ZGen_2Phase == YES
 #if ALG_ECMQV
 /*     10.2.11.1.1 avf1() */
@@ -68,6 +79,7 @@
 /* a) Convert xQ to an integer xqi using the convention specified in Appendix C.3. */
 /* b) Calculate xqm = xqi mod 2^ceil(f/2) (where f = ceil(log2(n)). */
 /* c) Calculate the associate value function avf(Q) = xqm + 2ceil(f / 2) */
+/*  Always returns TRUE(1). */
 static BOOL
 avf1(
      bigNum               bnX,           // IN/OUT: the reduced value
@@ -90,7 +102,6 @@ avf1(
 /* Points QsB() and QeB() are required to be on the curve of inQsA. The function will fail, possibly
    catastrophically, if this is not the case. */
 /* Error Returns Meaning */
-/* TPM_RC_SUCCESS results is valid */
 /* TPM_RC_NO_RESULT the value for dsA does not give a valid point on the curve */
 static TPM_RC
 C_2_2_MQV(
@@ -293,7 +304,6 @@ avfSm2(
    private key. All points are required to be on the curve of inQsA. The function will fail
    catastrophically if this is not the case */
 /* Error Returns Meaning */
-/* TPM_RC_SUCCESS results is valid */
 /* TPM_RC_NO_RESULT the value for dsA does not give a valid point on the curve */
 LIB_EXPORT TPM_RC
 SM2KeyExchange(

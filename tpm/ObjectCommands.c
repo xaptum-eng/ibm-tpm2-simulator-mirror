@@ -3,7 +3,7 @@
 /*			     Object Commands					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: ObjectCommands.c 1259 2018-07-10 19:11:09Z kgoldman $	*/
+/*            $Id: ObjectCommands.c 1594 2020-03-26 22:15:48Z kgoldman $	*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,7 +55,7 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2016 - 2018				*/
+/*  (c) Copyright IBM Corp. and others, 2016 - 2020				*/
 /*										*/
 /********************************************************************************/
 
@@ -112,7 +112,7 @@ TPM2_Create(
     TicketComputeCreation(EntityGetHierarchy(in->parentHandle), &newObject->name,
 			  &out->creationHash, &out->creationTicket);
     // Prepare output private data from sensitive
-    SensitiveToPrivate(&newObject->sensitive, &newObject->name.b, parentObject,
+    SensitiveToPrivate(&newObject->sensitive, &newObject->name, parentObject,
 		       publicArea->nameAlg,
 		       &out->outPrivate);
     // Finish by copying the remaining return values
@@ -395,7 +395,7 @@ TPM2_ObjectChangeAuth(
     sensitive = object->sensitive;
     sensitive.authValue = in->newAuth;
     // Protect the sensitive area
-    SensitiveToPrivate(&sensitive, &object->name.b, HandleToObject(in->parentHandle),
+    SensitiveToPrivate(&sensitive, &object->name, HandleToObject(in->parentHandle),
 		       object->publicArea.nameAlg,
 		       &out->outPrivate);
     return TPM_RC_SUCCESS;
@@ -503,12 +503,13 @@ TPM2_CreateLoaded(
 	                newObject->attributes.epsHierarchy = SET;
 	            // If so, use the primary seed and the digest of the template
 	            // to seed the DRBG
-		    DRBG_InstantiateSeeded((DRBG_STATE *)rand,
-					   &HierarchyGetPrimarySeed(in->parentHandle)->b,
-					   PRIMARY_OBJECT_CREATION,
-					   (TPM2B *)PublicMarshalAndComputeName(publicArea,
-										&name),
-					   &in->inSensitive.sensitive.data.b);
+		    result = DRBG_InstantiateSeeded((DRBG_STATE *)rand,
+						    &HierarchyGetPrimarySeed(in->parentHandle)->b,
+						    PRIMARY_OBJECT_CREATION,
+						    (TPM2B *)PublicMarshalAndComputeName(publicArea,&name),
+						    &in->inSensitive.sensitive.data.b);
+		    if (result != TPM_RC_SUCCESS)
+			return result;
 	        }
 	    else
 		// This is an ordinary object so use the normal random number generator
@@ -523,7 +524,7 @@ TPM2_CreateLoaded(
     // area
     if(parent != NULL && !derivation)
 	// Prepare output private data from sensitive
-	SensitiveToPrivate(&newObject->sensitive, &newObject->name.b,
+	SensitiveToPrivate(&newObject->sensitive, &newObject->name,
 			   parent, newObject->publicArea.nameAlg,
 			   &out->outPrivate);
     else

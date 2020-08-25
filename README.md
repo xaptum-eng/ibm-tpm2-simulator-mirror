@@ -2,7 +2,7 @@
 
 A mirror of IBM's TPM2.0 simulator, for Xaptum's continuous integration testing.
 
-TPM simulator version 1332, and TSS version 1331.
+TPM simulator version 1637, and TSS version 1331.
 
 ## Building
 

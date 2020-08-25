@@ -3,7 +3,7 @@
 /*			    Manage the session context counter 			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: Session.c 1311 2018-08-23 21:39:29Z kgoldman $		*/
+/*            $Id: Session.c 1594 2020-03-26 22:15:48Z kgoldman $		*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,24 +55,17 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2016 - 2018				*/
+/*  (c) Copyright IBM Corp. and others, 2016 - 2020				*/
 /*										*/
 /********************************************************************************/
+
 
 /* 8.9.2 Includes, Defines, and Local Variables */
 #define SESSION_C
 #include "Tpm.h"
-/*     8.9.3 File Scope Function -- ContextIdSetOldest() */
-/* This function is called when the oldest contextID is being loaded or deleted. Once a saved
-   context becomes the oldest, it stays the oldest until it is deleted. Finding the oldest is a bit
-   tricky.  It is not just the numeric comparison of values but is dependent on the value of
-   contextCounter. Assume we have a small contextArray with 8, 4-bit values with values 1 and 2 used
-   to indicate the loaded context slot number.  Also assume that the array contains hex values of (0
-   0 1 0 3 0 9 F) and that the contextCounter is an 8-bit counter with a value of 0x37. Since the
-   low nibble is 7, that means that values above 7 are older than values below it and, in this
-   example, 9 is the oldest value. Note if we subtract the counter value, from each slot that
-   contains a saved contextID we get (- - - - B - 2 - 8) and the oldest entry is now easy to
-   find. */
+
+/* 8.9.3	File Scope Function -- ContextIdSetOldest() */
+
 static void
 ContextIdSetOldest(
 		   void
@@ -106,7 +99,7 @@ ContextIdSetOldest(
 }
 /* 8.9.4 Startup Function -- SessionStartup() */
 /* This function initializes the session subsystem on TPM2_Startup(). */
-void
+BOOL
 SessionStartup(
 	       STARTUP_TYPE     type
 	       )
@@ -148,7 +141,7 @@ SessionStartup(
 	    // Initialize oldest saved session
 	    s_oldestSavedSession = MAX_ACTIVE_SESSIONS + 1;
 	}
-    return;
+    return TRUE;
 }
 /* 8.9.5 Access Functions */
 /* 8.9.5.1 SessionIsLoaded() */
@@ -177,7 +170,7 @@ SessionIsLoaded(
 /* 8.9.5.2 SessionIsSaved() */
 /* This function test a session handle references a saved session.  The handle must have previously
    been checked to make sure that it is a valid handle for an authorization session. */
-/* NOTE: An password authorization does not have a session. */
+/* NOTE: A password authorization does not have a session. */
 /* This function requires that the handle be a valid session handle. */
 /* Return Values Meaning */
 /* TRUE if session is saved */
@@ -267,8 +260,6 @@ SessionGet(
    prevent a context from being saved.  If so it will return TPM_RC_CONTEXT_GAP.  Otherwise, it will
    try to find an open slot in contextArray, set contextArray to the slot. This routine requires
    that the caller has determined the session array index for the session. */
-/* return type TPM_RC */
-/* TPM_RC_SUCCESS context ID was assigned */
 /* TPM_RC_CONTEXT_GAP can't assign a new contextID until the oldest saved session context is
    recycled */
 /* TPM_RC_SESSION_HANDLE there is no slot available in the context array for tracking of this

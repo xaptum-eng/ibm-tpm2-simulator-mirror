@@ -3,7 +3,7 @@
 /*			Self-Test of Cryptographic Functions 			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: CryptSelfTest.c 1259 2018-07-10 19:11:09Z kgoldman $		*/
+/*            $Id: CryptSelfTest.c 1594 2020-03-26 22:15:48Z kgoldman $		*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,7 +55,7 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2016 - 2018				*/
+/*  (c) Copyright IBM Corp. and others, 2016 - 2020				*/
 /*										*/
 /********************************************************************************/
 
@@ -196,7 +196,6 @@ CryptInitializeToTest(
    which it has no test. This allows the knowledge about which algorithms have test to be accessed
    through the interface that provides the test. */
 /* Error Returns Meaning */
-/* TPM_RC_SUCCESS test complete */
 /* TPM_RC_CANCELED test was canceled */
 LIB_EXPORT
 TPM_RC
@@ -206,7 +205,7 @@ CryptTestAlgorithm(
 		   )
 {
     TPM_RC                   result;
-#if defined SELF_TEST
+#if SELF_TEST
     result = TestAlgorithm(alg, toTest);
 #else
     // If this is an attempt to determine the algorithms for which there is a

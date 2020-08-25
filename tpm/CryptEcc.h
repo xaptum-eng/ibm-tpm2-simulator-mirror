@@ -1,9 +1,9 @@
 /********************************************************************************/
 /*										*/
-/*			     				*/
+/*			   Structure definitions used for ECC 			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: CryptEcc.h 1047 2017-07-20 18:27:34Z kgoldman $		*/
+/*            $Id: CryptEcc.h 1594 2020-03-26 22:15:48Z kgoldman $		*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,13 +55,9 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2016					*/
+/*  (c) Copyright IBM Corp. and others, 2016 - 2020				*/
 /*										*/
 /********************************************************************************/
-
-#ifndef CRYPTECC_H
-#define CRYPTECC_H
-
 
 /* 10.1.2 CryptEcc.h */
 /* 10.1.2.1 Introduction */
@@ -69,18 +65,8 @@
    internally. The ECC-related structures that cross the TPM interface are defined in TpmTypes.h */
 #ifndef _CRYPT_ECC_H
 #define _CRYPT_ECC_H
-/* 10.1.2.1.1 ECC-related Structures */
-/* This is used to define the macro that may or may not be in the data set for the curve
-   (BnEccData.c). If there is a mismatch, the compiler will warn that there is to much/not enough
-   initialization data in the curve. The macro is used because not all versions of the
-   CryptEccData.c need the curve name. */
-#ifdef NAMED_CURVES
-#define CURVE_NAME(a) , a
-#define CURVE_NAME_DEF const char *name;
-#else
-#  define CURVE_NAME(a)
-#  define CURVE_NAME_DEF
-#endif
+
+/* 10.1.2.2 Structures */
 typedef struct ECC_CURVE
 {
     const TPM_ECC_CURVE          curveId;
@@ -88,9 +74,30 @@ typedef struct ECC_CURVE
     const TPMT_KDF_SCHEME        kdf;
     const TPMT_ECC_SCHEME        sign;
     const ECC_CURVE_DATA        *curveData; // the address of the curve data
-    CURVE_NAME_DEF
+    const BYTE                  *OID;
 } ECC_CURVE;
+
+
+/* 10.1.2.2.1	Macros */
+/* This macro is used to instance an ECC_CURVE_DATA structure for the curve. This structure is
+   referenced by the ECC_CURVE structure */
+#define CURVE_DATA_DEF(CURVE)						\
+    const ECC_CURVE_DATA CURVE = {					\
+	(bigNum)&CURVE##_p_DATA, (bigNum)&CURVE##_n_DATA, (bigNum)&CURVE##_h_DATA, \
+	(bigNum)&CURVE##_a_DATA, (bigNum)&CURVE##_b_DATA,		\
+	{(bigNum)&CURVE##_gX_DATA, (bigNum)&CURVE##_gY_DATA, (bigNum)&BN_ONE} };
+
 extern const ECC_CURVE eccCurves[ECC_CURVE_COUNT];
-#endif
+
+#define CURVE_DEF(CURVE)						\
+    {									\
+	TPM_ECC_##CURVE,						\
+	    CURVE##_KEY_SIZE,						\
+	    CURVE##_KDF,						\
+	    CURVE##_SIGN,						\
+	    &##CURVE,							\
+	    OID_ECC_##CURVE						\
+	    }
+#define CURVE_NAME(N)
 
 #endif
