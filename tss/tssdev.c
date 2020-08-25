@@ -3,9 +3,8 @@
 /*		Linux Device Transmit and Receive Utilities			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tssdev.c 1294 2018-08-09 19:08:34Z kgoldman $ 		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -46,13 +45,12 @@
 #include <errno.h>
 
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
 #include <fcntl.h>
 
 #include <ibmtss/tssresponsecode.h>
 #include <ibmtss/tsserror.h>
 #include <ibmtss/tssprint.h>
+#include <ibmtss/Unmarshal_fp.h>
 #include "tssproperties.h"
 
 #include "tssdev.h"
@@ -62,7 +60,7 @@
 static uint32_t TSS_Dev_Open(TSS_CONTEXT *tssContext);
 static uint32_t TSS_Dev_SendCommand(int dev_fd, const uint8_t *buffer, uint16_t length,
 				    const char *message);
-static uint32_t TSS_Dev_ReceiveCommand(int dev_fd, uint8_t *buffer, uint32_t *length);
+static uint32_t TSS_Dev_ReceiveResponse(int dev_fd, uint8_t *buffer, uint32_t *length);
 
 /* global configuration */
 
@@ -97,7 +95,7 @@ TPM_RC TSS_Dev_Transmit(TSS_CONTEXT *tssContext,
     /* receive the response from the dev_fd.  Returns dev_fd errors, malformed response errors.
        Else returns the TPM response code. */
     if (rc == 0) {
-	rc = TSS_Dev_ReceiveCommand(tssContext->dev_fd, responseBuffer, read);
+	rc = TSS_Dev_ReceiveResponse(tssContext->dev_fd, responseBuffer, read);
     }
     return rc;
 }
@@ -149,7 +147,7 @@ static uint32_t TSS_Dev_SendCommand(int dev_fd,
     return rc;
 }
 
-/* TSS_Dev_ReceiveCommand() reads a response buffer from the device.  'buffer' must be at least
+/* TSS_Dev_ReceiveResponse() reads a response buffer from the device.  'buffer' must be at least
    MAX_RESPONSE_SIZE bytes.
 
    Returns TPM packet error code.
@@ -157,56 +155,66 @@ static uint32_t TSS_Dev_SendCommand(int dev_fd,
    Validates that the packet length and the packet responseSize match 
 */
 
-static uint32_t TSS_Dev_ReceiveCommand(int dev_fd, uint8_t *buffer, uint32_t *length)
+static uint32_t TSS_Dev_ReceiveResponse(int dev_fd, uint8_t *buffer, uint32_t *length)
 {
     uint32_t 	rc = 0;
-    int 	irc;
-    uint32_t 	responseSize = 0;
-    uint32_t 	responseCode = 0;
-
-    if (tssVverbose) printf("TSS_Dev_ReceiveCommand:\n");
+    int 	irc;		/* read() return code, negative is error, positive is length */
+    uint32_t 	responseSize = 0;	/* from TPM packet response stream */
+    uint32_t	responseCode = 0;
+    uint8_t 	*tmpptr;	/* for unmarshaling responseSize and responseCode */
+    uint32_t	tmpsize;
+    
+    if (tssVverbose) printf("TSS_Dev_ReceiveResponse:\n");
     /* read the TPM device */
     if (rc == 0) {
 	irc = read(dev_fd, buffer, MAX_RESPONSE_SIZE);
 	if (irc <= 0) {
 	    rc = TSS_RC_BAD_CONNECTION;
 	    if (irc < 0) {
-		if (tssVerbose) printf("TSS_Dev_ReceiveCommand: read error %d %s\n",
+		if (tssVerbose) printf("TSS_Dev_ReceiveResponse: read error %d %s\n",
 				       errno, strerror(errno));
 	    }
 	}
     }
+    /* read() is successful, trace the response */
     if ((rc == 0) && tssVverbose) {
-	TSS_PrintAll("TSS_Dev_ReceiveCommand",
+	TSS_PrintAll("TSS_Dev_ReceiveResponse",
 		     buffer, irc);
     }
-    /* verify that there is at least a tag, responseSize, and responseCode */
+    /* verify that there is at least a tag, responseSize, and responseCode in TPM response */
     if (rc == 0) {
 	if ((unsigned int)irc < (sizeof(TPM_ST) + sizeof(uint32_t) + sizeof(uint32_t))) {
-	    if (tssVerbose) printf("TSS_Dev_ReceiveCommand: read bytes %u < header\n", irc);
+	    if (tssVerbose) printf("TSS_Dev_ReceiveResponse: read bytes %u < header\n", irc);
+	    rc = TSS_RC_MALFORMED_RESPONSE;
+	}
+	/* skip the tag */
+	else {
+	    tmpptr = buffer + sizeof(TPM_ST);
+	    tmpsize = (unsigned int)irc - sizeof(TPM_ST);
+	}
+    }
+    /* get responseSize from the packet, should never fail because of above check */
+    if (rc == 0) {
+	rc = TSS_UINT32_Unmarshalu(&responseSize, &tmpptr, &tmpsize);
+    }
+    /* sanity check against the length actually received, the return code */
+    if (rc == 0) {
+	if ((uint32_t)irc != responseSize) {
+	    if (tssVerbose) printf("TSS_Dev_ReceiveResponse: read bytes %u != responseSize %u\n",
+				   (uint32_t)irc, responseSize);
 	    rc = TSS_RC_MALFORMED_RESPONSE;
 	}
     }
-    /* get responseSize from the packet */
+    /* get responseCode from the packet, should never fail because of above check */
     if (rc == 0) {
-	responseSize = ntohl(*(uint32_t *)(buffer + sizeof(TPM_ST)));
-	/* sanity check against the length actually received, the return code */
-	if ((uint32_t)irc != responseSize) {
-	    if (tssVerbose) printf("TSS_Dev_ReceiveCommand: read bytes %u != responseSize %u\n",
-				   (uint32_t)irc, responseSize);
-	    rc = TSS_RC_BAD_CONNECTION;
-	}
+	rc = TSS_UINT32_Unmarshalu(&responseCode, &tmpptr, &tmpsize);
     }
-    /* read the TPM return code from the packet */
-    if (rc == 0) {
-	responseCode = ntohl(*(uint32_t *)(buffer + sizeof(TPM_ST)+ sizeof(uint32_t)));
-    }
+   /* if there was no lower level failure, return the TPM packet responseCode */
     if (rc == 0) {
 	rc = responseCode;
     }
-	
     *length = responseSize;
-    if (tssVverbose) printf("TSS_Dev_ReceiveCommand: rc %08x\n", rc);
+    if (tssVverbose) printf("TSS_Dev_ReceiveResponse: rc %08x\n", rc);
     return rc;
 }	
 

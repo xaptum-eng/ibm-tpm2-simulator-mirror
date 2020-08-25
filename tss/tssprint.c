@@ -3,9 +3,8 @@
 /*			     Structure Print and Scan Utilities			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tssprint.c 1303 2018-08-20 16:49:52Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -42,7 +41,6 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include <ibmtss/Unmarshal_fp.h>
 #include <ibmtss/tsserror.h>
 #include <ibmtss/tssutils.h>
 
@@ -63,6 +61,7 @@ int TSS_SwallowPrintf(const char *format, ...)
 
 #endif
 
+#ifndef TPM_TSS_NOFILE
 /* TSS_Array_Scan() converts a string to a binary array */
 
 uint32_t TSS_Array_Scan(unsigned char **data,	/* output binary, freed by caller */
@@ -98,6 +97,7 @@ uint32_t TSS_Array_Scan(unsigned char **data,	/* output binary, freed by caller 
     }
     return rc;
 }
+#endif /* TPM_TSS_NOFILE */
 
 /* TSS_PrintAll() prints 'string', the length, and then the entire byte array
  */
@@ -150,6 +150,7 @@ void TSS_PrintAllLogLevel(uint32_t loglevel, const char *string, unsigned int in
     return;
 }
 
+#ifndef TPM_TSS_NO_PRINT
 #ifdef TPM_TPM20
 
 void TSS_TPM2B_Print(const char *string, unsigned int indent, TPM2B *source)
@@ -254,6 +255,18 @@ void TSS_TPM_ALG_ID_Print(const char *string, TPM_ALG_ID source, unsigned int in
       case  ALG_CAMELLIA_VALUE:
 	printf("%s TPM_ALG_CAMELLIA\n", string);
 	break;
+      case ALG_SHA3_256_VALUE:
+	printf("%s TPM_ALG_SHA3_256\n", string);
+	break;
+      case ALG_SHA3_384_VALUE:
+	printf("%s TPM_ALG_SHA3_384\n", string);
+	break;
+      case ALG_SHA3_512_VALUE:
+	printf("%s TPM_ALG_SHA3_512\n", string);
+	break;
+      case ALG_CMAC_VALUE:
+	printf("%s TPM_ALG_CMAC\n", string);
+	break;
       case  ALG_CTR_VALUE:
 	printf("%s TPM_ALG_CTR\n", string);
 	break;
@@ -311,6 +324,15 @@ void TSS_TPM_ECC_CURVE_Print(const char *string, TPM_ECC_CURVE source, unsigned 
       default:
 	printf("%s TPM_ECC_CURVE value %04hx unknown\n", string, source);
     }
+    return;
+}
+
+/* Table 100 - Definition of TPMS_TAGGED_POLICY Structure <OUT> */
+
+void TSS_TPMS_TAGGED_POLICY_Print(TPMS_TAGGED_POLICY *source, unsigned int indent)
+{
+    TSS_TPM_HANDLE_Print("handle", source->handle, indent);
+    TSS_TPMT_HA_Print(&source->policyHash, indent);
     return;
 }
 
@@ -809,6 +831,9 @@ void TSS_TPM_ST_Print(const char *string, TPM_ST source, unsigned int indent)
       case TPM_ST_ATTEST_CREATION:
 	printf("%s TPM_ST_ATTEST_CREATION\n", string);
 	break;
+      case TPM_ST_ATTEST_NV_DIGEST:
+	printf("%s TPM_ST_ATTEST_NV_DIGEST\n", string);
+	break;
       case TPM_ST_CREATION:
 	printf("%s TPM_ST_CREATION\n", string);
 	break;
@@ -986,6 +1011,7 @@ void TSS_TPM_TPMA_ALGORITHM_Print(TPMA_ALGORITHM source, unsigned int indent)
 
 void TSS_TPMA_OBJECT_Print(const char *string, TPMA_OBJECT source, unsigned int indent)
 {
+    printf("%*s%s: %08x\n", indent, "", string, source.val);
     if (source.val & TPMA_OBJECT_FIXEDTPM) printf("%*s%s: fixedTpm\n", indent, "", string);
     if (source.val & TPMA_OBJECT_STCLEAR) printf("%*s%s: stClear\n", indent, "", string);
     if (source.val & TPMA_OBJECT_FIXEDPARENT) printf("%*s%s: fixedParent\n", indent, "", string);
@@ -1031,12 +1057,18 @@ void TSS_TPMA_LOCALITY_Print(TPMA_LOCALITY source, unsigned int indent)
 
 void TSS_TPMA_PERMANENT_Print(TPMA_PERMANENT source, unsigned int indent)
 {
-    if (source.val & TPMA_PERMANENT_OWNERAUTHSET) printf("%*s" "TPMA_PERMANENT: ownerAuthSet\n", indent, "");
-    if (source.val & TPMA_PERMANENT_ENDORSEMENTAUTHSET) printf("%*s" "TPMA_PERMANENT: endorsementAuthSet\n", indent, "");
-    if (source.val & TPMA_PERMANENT_LOCKOUTAUTHSET) printf("%*s" "TPMA_PERMANENT: lockoutAuthSet\n", indent, "");
-    if (source.val & TPMA_PERMANENT_DISABLECLEAR) printf("%*s" "TPMA_PERMANENT: disableClear\n", indent, "");
-    if (source.val & TPMA_PERMANENT_INLOCKOUT) printf("%*s" "TPMA_PERMANENT: inLockout\n", indent, "");
-    if (source.val & TPMA_PERMANENT_TPMGENERATEDEPS) printf("%*s" "TPMA_PERMANENT: tpmGeneratedEPS\n", indent, "");
+    printf("%*s" "TPMA_PERMANENT: ownerAuthSet %s\n", indent, "",
+	   (source.val & TPMA_PERMANENT_OWNERAUTHSET) ? "yes" : "no"); 
+    printf("%*s" "TPMA_PERMANENT: endorsementAuthSet %s\n", indent, "",
+	   (source.val & TPMA_PERMANENT_ENDORSEMENTAUTHSET)  ? "yes" : "no"); 
+    printf("%*s" "TPMA_PERMANENT: lockoutAuthSet %s\n", indent, "",
+	   (source.val & TPMA_PERMANENT_LOCKOUTAUTHSET)  ? "yes" : "no"); 
+    printf("%*s" "TPMA_PERMANENT: disableClear %s\n", indent, "",
+	   (source.val & TPMA_PERMANENT_DISABLECLEAR) ? "yes" : "no"); 
+    printf("%*s" "TPMA_PERMANENT: inLockout %s\n", indent, "",
+	   (source.val & TPMA_PERMANENT_INLOCKOUT) ? "yes" : "no"); 
+    printf("%*s" "TPMA_PERMANENT: tpmGeneratedEPS %s\n", indent, "",
+	   (source.val & TPMA_PERMANENT_TPMGENERATEDEPS)  ? "yes" : "no"); 
     return;
 }
 
@@ -1044,11 +1076,16 @@ void TSS_TPMA_PERMANENT_Print(TPMA_PERMANENT source, unsigned int indent)
 
 void TSS_TPMA_STARTUP_CLEAR_Print(TPMA_STARTUP_CLEAR source, unsigned int indent)
 {
-    if (source.val & TPMA_STARTUP_CLEAR_PHENABLE) printf("%*s" "TPMA_STARTUP_CLEAR: phEnable\n", indent, "");
-    if (source.val & TPMA_STARTUP_CLEAR_SHENABLE) printf("%*s" "TPMA_STARTUP_CLEAR: shEnable\n", indent, "");
-    if (source.val & TPMA_STARTUP_CLEAR_EHENABLE) printf("%*s" "TPMA_STARTUP_CLEAR: ehEnable\n", indent, "");
-    if (source.val & TPMA_STARTUP_CLEAR_PHENABLENV) printf("%*s" "TPMA_STARTUP_CLEAR: phEnableNV\n", indent, "");
-    if (source.val & TPMA_STARTUP_CLEAR_ORDERLY) printf("%*s" "TPMA_STARTUP_CLEAR: orderly\n", indent, "");
+    printf("%*s" "TPMA_STARTUP_CLEAR: phEnable %s\n", indent, "",
+	   (source.val & TPMA_STARTUP_CLEAR_PHENABLE)  ? "yes" : "no"); 
+    printf("%*s" "TPMA_STARTUP_CLEAR: shEnable %s\n", indent, "",
+	   (source.val & TPMA_STARTUP_CLEAR_SHENABLE)  ? "yes" : "no"); 
+    printf("%*s" "TPMA_STARTUP_CLEAR: ehEnable %s\n", indent, "",
+	   (source.val & TPMA_STARTUP_CLEAR_EHENABLE)  ? "yes" : "no"); 
+    printf("%*s" "TPMA_STARTUP_CLEAR: phEnableNV %s\n", indent, "",
+	   (source.val & TPMA_STARTUP_CLEAR_PHENABLENV)  ? "yes" : "no"); 
+    printf("%*s" "TPMA_STARTUP_CLEAR: orderly %s\n", indent, "",
+	   (source.val & TPMA_STARTUP_CLEAR_ORDERLY)  ? "yes" : "no"); 
     return;
 }
 
@@ -1056,9 +1093,21 @@ void TSS_TPMA_STARTUP_CLEAR_Print(TPMA_STARTUP_CLEAR source, unsigned int indent
 
 void TSS_TPMA_MEMORY_Print(TPMA_MEMORY source, unsigned int indent)
 {
-    if (source.val & TPMA_MEMORY_SHAREDRAM) printf("%*s" "TPMA_MEMORY: sharedRAM\n", indent, "");
-    if (source.val & TPMA_MEMORY_SHAREDNV) printf("%*s" "TPMA_MEMORY: sharedNV\n", indent, "");
-    if (source.val & TPMA_MEMORY_OBJECTCOPIEDTORAM) printf("%*s" "TPMA_MEMORY: objectCopiedToRam\n", indent, "");
+    printf("%*s" "TPMA_MEMORY: sharedRAM %s\n", indent, "",
+	   (source.val & TPMA_MEMORY_SHAREDRAM) ? "yes" : "no");
+    printf("%*s" "TPMA_MEMORY: sharedNV %s\n", indent, "",
+	   (source.val & TPMA_MEMORY_SHAREDNV) ? "yes" : "no");
+    printf("%*s" "TPMA_MEMORY: objectCopiedToRam %s\n", indent, "",
+	   (source.val & TPMA_MEMORY_OBJECTCOPIEDTORAM) ? "yes" : "no");
+    return;
+}
+
+/* Table 38 - Definition of (UINT32) TPMA_MODES Bits <Out> */
+
+void TSS_TPMA_MODES_Print(TPMA_MODES source, unsigned int indent)
+{
+    printf("%*s" "TPMA_MODES: TPMA_MODES_FIPS_140_2 %s\n", indent, "",
+	   (source.val & TPMA_MODES_FIPS_140_2) ? "yes" : "no");
     return;
 }
 
@@ -1111,6 +1160,8 @@ void TSS_TPMU_HA_Print(TPMU_HA *source, uint32_t selector, unsigned int indent)
 	TSS_PrintAlli("sm3_256", indent, source->sm3_256, SM3_256_DIGEST_SIZE);
 	break;
 #endif
+      case TPM_ALG_NULL:
+	break;
       default:
 	printf("%*s" "TPMU_HA: selection %08x not implemented\n", indent, "", selector);
     }
@@ -1261,11 +1312,15 @@ void TSS_TPMS_CLOCK_INFO_Print(TPMS_CLOCK_INFO *source, unsigned int indent)
 
 void TSS_TPMS_TIME_INFO_Print(TPMS_TIME_INFO *source, unsigned int indent)
 {
+    uint64_t days;
+    uint64_t hours;
+    uint64_t minutes;
+    uint64_t seconds;
     printf("%*s" "TPMS_TIME_INFO time %"PRIu64" msec", indent, "", source->time);
-    uint64_t days = source->time/(1000 * 60 * 60 * 24);
-    uint64_t hours = (source->time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60);
-    uint64_t minutes = (source->time % (1000 * 60 * 60)) / (1000 * 60);
-    uint64_t seconds = (source->time % (1000 * 60)) / (1000);
+    days = source->time/(1000 * 60 * 60 * 24);
+    hours = (source->time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60);
+    minutes = (source->time % (1000 * 60 * 60)) / (1000 * 60);
+    seconds = (source->time % (1000 * 60)) / (1000);
     printf(" - %"PRIu64" days %"PRIu64" hours %"PRIu64" minutes %"PRIu64" seconds\n",
 	   days, hours, minutes, seconds);
     TSS_TPMS_CLOCK_INFO_Print(&source->clockInfo, indent+2);
@@ -1331,11 +1386,19 @@ void TSS_TPMS_CREATION_INFO_Print(TPMS_CREATION_INFO *source, unsigned int inden
 
 /* Table 123 - Definition of TPMS_NV_CERTIFY_INFO Structure */
 
-void TSS_TPMS_NV_CERTIFY_INFO_Print(TPMS_NV_CERTIFY_INFO  *source, unsigned int indent)
+void TSS_TPMS_NV_CERTIFY_INFO_Print(TPMS_NV_CERTIFY_INFO *source, unsigned int indent)
 {
     TSS_TPM2B_Print("TPMS_NV_CERTIFY_INFO indexName", indent, &source->indexName.b);
     printf("%*s" "TPMS_NV_CERTIFY_INFO offset %d\n", indent, "",  source->offset);
     TSS_TPM2B_Print("TPMS_NV_CERTIFY_INFO nvContents", indent, &source->nvContents.b);
+    return;
+}
+
+/* Table 125 - Definition of TPMS_NV_DIGEST_CERTIFY_INFO Structure <OUT> */
+void TSS_TPMS_NV_DIGEST_CERTIFY_INFO_Print(TPMS_NV_DIGEST_CERTIFY_INFO  *source, unsigned int indent)
+{
+    TSS_TPM2B_Print("TPMS_NV_DIGEST_CERTIFY_INFO indexName", indent, &source->indexName.b);
+    TSS_TPM2B_Print("TPMS_NV_DIGEST_CERTIFY_INFO nvDigest", indent, &source->nvDigest.b);
     return;
 }
 
@@ -1365,6 +1428,9 @@ void TSS_TPMI_ST_ATTEST_Print(const char *string, TPMI_ST_ATTEST selector, unsig
 	break;
       case TPM_ST_ATTEST_NV:
 	printf("%s TPM_ST_ATTEST_NV\n", string);
+	break;
+      case TPM_ST_ATTEST_NV_DIGEST:
+	printf("%s TPM_ST_ATTEST_NV_DIGEST\n", string);
 	break;
       default:
 	printf("%s TPMI_ST_ATTEST_Print: selection %04hx not implemented\n", string, selector);
@@ -1398,6 +1464,9 @@ void TSS_TPMU_ATTEST_Print(TPMU_ATTEST *source, TPMI_ST_ATTEST selector, unsigne
       case TPM_ST_ATTEST_NV:
 	TSS_TPMS_NV_CERTIFY_INFO_Print(&source->nv, indent+2);
 	break;
+      case TPM_ST_ATTEST_NV_DIGEST:
+	TSS_TPMS_NV_DIGEST_CERTIFY_INFO_Print(&source->nvDigest, indent+2);
+	break;
       default:
 	printf("%*s" "TPMU_ATTEST selection %04hx not implemented\n", indent, "", selector);
     }
@@ -1410,13 +1479,16 @@ void TSS_TPMS_ATTEST_Print(TPMS_ATTEST *source, unsigned int indent)
 {
     printf("%*s" "TPMS_ATTEST magic %08x\n", indent+2, "", source->magic);
     TSS_TPMI_ST_ATTEST_Print("type", source->type, indent+2);
-    TSS_TPM2B_Print("TPMS_ATTEST extraData", indent+2, &source->extraData.b);
     TSS_TPM2B_Print("TPMS_ATTEST qualifiedSigner", indent+2, &source->qualifiedSigner.b);
+    TSS_TPM2B_Print("TPMS_ATTEST extraData", indent+2, &source->extraData.b);
     TSS_TPMS_CLOCK_INFO_Print(&source->clockInfo, indent+2);
     printf("%*s" "TPMS_ATTEST firmwareVersion %"PRIu64"\n",  indent+2, "", source->firmwareVersion);
     TSS_TPMU_ATTEST_Print(&source->attested, source->type, indent+2);
     return;
 }
+
+#if 0	/* Removed because it required a large stack allocation.  The utilities didn't use it, but
+	   rather did the unmarshal and print themselves. */
 
 /* Table 127 - Definition of TPM2B_ATTEST Structure <OUT> */
 
@@ -1441,6 +1513,7 @@ void TSS_TPM2B_ATTEST_Print(TPM2B_ATTEST *source, unsigned int indent)
     }
     return;
 }
+#endif
 
 /* Table 128 - Definition of TPMS_AUTH_COMMAND Structure <IN> */
 
@@ -1520,8 +1593,10 @@ void TSS_TPMT_SYM_DEF_Print(TPMT_SYM_DEF *source, unsigned int indent)
 void TSS_TPMT_SYM_DEF_OBJECT_Print(TPMT_SYM_DEF_OBJECT *source, unsigned int indent)
 {
     TSS_TPM_ALG_ID_Print("algorithm", source->algorithm, indent+2);
-    printf("%*s" "keyBits: %u\n", indent+2, "", source->keyBits.sym);
-    TSS_TPM_ALG_ID_Print("mode", source->mode.sym, indent+2);
+    if (source->algorithm != TPM_ALG_NULL) {
+	printf("%*s" "keyBits: %u\n", indent+2, "", source->keyBits.sym);
+	TSS_TPM_ALG_ID_Print("mode", source->mode.sym, indent+2);
+    }
     return;
 }
 
@@ -1917,7 +1992,7 @@ void TSS_TPMU_SIGNATURE_Print(TPMU_SIGNATURE *source, TPMI_ALG_SIG_SCHEME select
 
 void TSS_TPMT_SIGNATURE_Print(TPMT_SIGNATURE *source, unsigned int indent)
 {
-    TSS_TPM_ALG_ID_Print("sigAlg", source->sigAlg, indent);
+    TSS_TPM_ALG_ID_Print("sigAlg", source->sigAlg, indent+2);
     if (source->sigAlg != TPM_ALG_NULL) {
 	TSS_TPMU_SIGNATURE_Print(&source->signature, source->sigAlg, indent);
     }
@@ -2128,6 +2203,7 @@ void TSS_TPMT_SENSITIVE_Print(TPMT_SENSITIVE *source, unsigned int indent)
     TSS_TPM_ALG_ID_Print("sensitiveType", source->sensitiveType, indent+2);
     TSS_TPM2B_Print("TPMT_SENSITIVE authValue", indent+2, &source->authValue.b);
     TSS_TPM2B_Print("TPMT_SENSITIVE seedValue", indent+2, &source->seedValue.b);
+    TSS_TPMU_SENSITIVE_COMPOSITE_Print(&source->sensitive, source->sensitiveType, indent+2);
     return;
 }
 
@@ -2136,7 +2212,9 @@ void TSS_TPMT_SENSITIVE_Print(TPMT_SENSITIVE *source, unsigned int indent)
 void TSS_TPM2B_SENSITIVE_Print(TPM2B_SENSITIVE *source, unsigned int indent)
 {
     printf("%*s" "TPM2B_SENSITIVE size %u\n", indent+2, "", source->t.size);
-    TSS_TPMT_SENSITIVE_Print(&source->t.sensitiveArea, indent+2);
+    if (source->t.size != 0) {
+	TSS_TPMT_SENSITIVE_Print(&source->t.sensitiveArea, indent+2);
+    }
     return;
 }
 
@@ -2181,7 +2259,7 @@ void TSS_TPMA_NV_Print(TPMA_NV source, unsigned int indent)
 	printf("%*s" "TPM_NT_PIN_PASS\n", indent, "");
 	break;
       default:
-	printf("%*s %02x" "TPMA_NV type unknown\n", indent, "", nvType);
+	printf("%*s" "TPMA_NV type %02x unknown\n", indent, "", nvType);
     }
 
     if (source.val & TPMA_NVA_POLICY_DELETE) printf("%*s" "TPMA_NV_POLICY_DELETE\n", indent, "");
@@ -2268,3 +2346,5 @@ void TSS_TPM2B_CREATION_DATA_Print(TPM2B_CREATION_DATA *source, unsigned int ind
 }
 
 #endif	/* TPM_TPM20 */
+
+#endif /* TPM_TSS_NO_PRINT */

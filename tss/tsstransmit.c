@@ -3,9 +3,8 @@
 /*			    Transmit and Receive Utility			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tsstransmit.c 1257 2018-06-27 20:52:08Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -50,16 +49,7 @@
 #include <ibmtss/tsserror.h>
 #include <ibmtss/tssprint.h>
 
-#ifdef TPM_POSIX
 #include "tssdev.h"
-#endif
-
-#ifdef TPM_WINDOWS
-#ifdef TPM_WINDOWS_TBSI
-#include "tsstbsi.h"
-#endif
-#endif
-
 #include <ibmtss/tsstransmit.h>
 
 extern int tssVverbose;
@@ -67,7 +57,8 @@ extern int tssVerbose;
 
 /* local prototypes */
 
-/* TSS_TransmitPlatform() transmits an administrative out of band command to the TPM.
+/* TSS_TransmitPlatform() transmits an administrative out of band command to the TPM through the
+   platform port.
 
    Supported by the simulator, not the TPM device.
 */
@@ -98,7 +89,40 @@ TPM_RC TSS_TransmitPlatform(TSS_CONTEXT *tssContext, uint32_t command, const cha
     return rc;
 }
 
-/* TSS_Transmit() transmits a TPM command packet and receives a response.
+/* TSS_TransmitCommand() transmits an administrative in band command to the TPM through the
+   command port.
+
+   Supported by the simulator, not the TPM device.
+*/
+
+TPM_RC TSS_TransmitCommand(TSS_CONTEXT *tssContext, uint32_t command, const char *message)
+{
+    TPM_RC rc = 0;
+
+#ifndef TPM_NOSOCKET
+    if ((strcmp(tssContext->tssInterfaceType, "socsim") == 0)) {
+	rc = TSS_Socket_TransmitCommand(tssContext, command, message);
+    }
+    else
+#else
+    command = command;
+    message = message;
+#endif
+    if ((strcmp(tssContext->tssInterfaceType, "dev") == 0)) {
+	if (tssVerbose) printf("TSS_TransmitCommand: device %s unsupported\n",
+			       tssContext->tssInterfaceType);
+	rc = TSS_RC_INSUPPORTED_INTERFACE;	
+    }
+    else {
+	if (tssVerbose) printf("TSS_TransmitCommand: device %s unsupported\n",
+			       tssContext->tssInterfaceType);
+	rc = TSS_RC_INSUPPORTED_INTERFACE;	
+    }
+    return rc;
+}
+
+/* TSS_Transmit() transmits a TPM command packet and receives a response using the command port.
+   The command type is hard coded to TPM_SEND_COMMAND.
 
 */
 
@@ -118,27 +142,11 @@ TPM_RC TSS_Transmit(TSS_CONTEXT *tssContext,
     }
     else
 #endif
-	
-    if ((strcmp(tssContext->tssInterfaceType, "dev") == 0)) {
-#ifdef TPM_POSIX	/* transmit through Linux device driver */
+    if (strcmp(tssContext->tssInterfaceType, "dev") == 0) {
 	rc = TSS_Dev_Transmit(tssContext,
 			      responseBuffer, read,
 			      commandBuffer, written,
 			      message);
-#endif
-
-#ifdef TPM_WINDOWS	/* transmit through Windows TBSI */
-#ifdef TPM_WINDOWS_TBSI
-	rc = TSS_Tbsi_Transmit(tssContext,
-			       responseBuffer, read,
-			       commandBuffer, written,
-			       message);
-#else
-	if (tssVerbose) printf("TSS_Transmit: device %s unsupported\n",
-			       tssContext->tssInterfaceType);
-	rc = TSS_RC_INSUPPORTED_INTERFACE;	
-#endif
-#endif
     }
     else {
 	if (tssVerbose) printf("TSS_Transmit: device %s unsupported\n",
@@ -162,20 +170,8 @@ TPM_RC TSS_Close(TSS_CONTEXT *tssContext)
 	}
 	else
 #endif
-        if ((strcmp(tssContext->tssInterfaceType, "dev") == 0)) {
-#ifdef TPM_POSIX	/* transmit through Linux device driver */
+        if (strcmp(tssContext->tssInterfaceType, "dev") == 0) {
 	    rc = TSS_Dev_Close(tssContext);
-#endif
-
-#ifdef TPM_WINDOWS	/* transmit through Windows TBSI */
-#ifdef TPM_WINDOWS_TBSI
-	    rc = TSS_Tbsi_Close(tssContext);
-#else
-	    if (tssVerbose) printf("TSS_Transmit: device %s unsupported\n",
-				   tssContext->tssInterfaceType);
-	    rc = TSS_RC_INSUPPORTED_INTERFACE;	
-#endif
-#endif
 	}
 	else {
 	    if (tssVerbose) printf("TSS_Transmit: device %s unsupported\n",

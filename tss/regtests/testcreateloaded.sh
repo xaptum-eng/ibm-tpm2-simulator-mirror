@@ -6,9 +6,8 @@
 #			TPM2 regression test					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	$Id: testcreateloaded.sh 1277 2018-07-23 20:30:23Z kgoldman $		#
 #										#
-# (c) Copyright IBM Corporation 2015 - 2018					#
+# (c) Copyright IBM Corporation 2015 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -46,7 +45,7 @@ echo "CreateLoaded"
 echo ""
 
 echo ""
-echo "CreateLoaded Primary Key"
+echo "CreateLoaded Primary Key, Hierarchy Parent"
 echo ""
 
 for HIER in "40000001" "4000000c" "4000000b"
@@ -95,7 +94,7 @@ do
 done
 
 echo ""
-echo "CreateLoaded Child Key"
+echo "CreateLoaded Child Key, Primary Parent"
 echo ""
 
 echo "CreateLoaded child storage key at 80000001, parent 80000000"
@@ -135,7 +134,44 @@ ${PREFIX}flushcontext -ha 80000001 > run.out
 checkSuccess $?
 
 echo ""
-echo "CreateLoaded Derived Key"
+echo "CreateLoaded Primary Derived Key, Hierarchy Parent"
+echo ""
+
+for HIER in "e" "o" "p"
+do
+
+    echo "Create a primary ${HIER} derivation parent 80000001"
+    ${PREFIX}createprimary -hi ${HIER} -dp > run.out
+    checkSuccess $?
+
+    echo "Create a derived key 80000002"
+    ${PREFIX}createloaded -hp 80000001 -der -ecc bnp256 -den -kt f -kt p -opu tmppub.bin > run.out
+    checkSuccess $?
+
+    echo "Flush the derived key 80000002"
+    ${PREFIX}flushcontext -ha 80000002 > run.out
+    checkSuccess $?
+
+    echo "Create a derived key 80000002"
+    ${PREFIX}createloaded -hp 80000001 -der -ecc bnp256 -den -kt f -kt p -opu tmppub1.bin > run.out
+    checkSuccess $?
+
+    echo "Flush the derived key 80000002"
+    ${PREFIX}flushcontext -ha 80000002 > run.out
+    checkSuccess $?
+
+    echo "Verify that the two derived keys are the same"
+    diff tmppub.bin tmppub1.bin > run.out
+    checkSuccess $?
+
+    echo "Flush the derivation parent"
+    ${PREFIX}flushcontext -ha 80000001 > run.out
+    checkSuccess $?
+
+done
+
+echo ""
+echo "CreateLoaded Child Derived Key, Primary Parent"
 echo ""
 
 echo "Create a derivation parent under the primary key"
@@ -146,37 +182,42 @@ echo "Load the derivation parent to 80000001"
 ${PREFIX}load -hp 80000000 -ipr tmpdppriv.bin -ipu tmpdppub.bin -pwdp sto > run.out
 checkSuccess $?
 
-echo "Create an EC signing key 80000002 under the derivation parent key"
-${PREFIX}createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -opem tmppub.pem -pwdp dp -ecc nistp256 > run.out
-checkSuccess $?
+for CURVE in nistp256 nistp384
+do
+	     
+    echo "Create a ${CURVE} ECC signing key 80000002 under the derivation parent key"
+    ${PREFIX}createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -opem tmppub.pem -pwdp dp -ecc ${CURVE} > run.out
+    checkSuccess $?
 
-echo "Sign a digest"
-${PREFIX}sign -hk 80000002 -halg sha256 -ecc -if policies/aaa -os sig.bin > run.out
-checkSuccess $?
+    echo "Sign a digest"
+    ${PREFIX}sign -hk 80000002 -halg sha256 -salg ecc -if policies/aaa -os sig.bin > run.out
+    checkSuccess $?
 
-echo "Verify the ECC signature using the TPM"
-${PREFIX}verifysignature -hk 80000002 -halg sha256 -ecc -if policies/aaa -is sig.bin > run.out
-checkSuccess $?
+    echo "Verify the ${CURVE} ECC signature using the TPM"
+    ${PREFIX}verifysignature -hk 80000002 -halg sha256 -ecc -if policies/aaa -is sig.bin > run.out
+    checkSuccess $?
 
-echo "Verify the signature using PEM"
-${PREFIX}verifysignature -ipem tmppub.pem -halg sha256 -if policies/aaa -is sig.bin > run.out
-checkSuccess $?
+    echo "Verify the ${CURVE} signature using PEM"
+    ${PREFIX}verifysignature -ipem tmppub.pem -halg sha256 -if policies/aaa -is sig.bin > run.out
+    checkSuccess $?
 
-echo "Flush the signing key 80000002"
-${PREFIX}flushcontext -ha 80000002 > run.out
-checkSuccess $?
+    echo "Flush the signing key 80000002"
+    ${PREFIX}flushcontext -ha 80000002 > run.out
+    checkSuccess $?
 
-echo "Create another EC signing key 80000002 under the derivation parent key"
-${PREFIX}createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv1.bin -opu tmppub1.bin -opem tmppub1.pem -pwdp dp -ecc nistp256 > run.out
-checkSuccess $?
+    echo "Create another ${CURVE} ECC signing key 80000002 under the derivation parent key"
+    ${PREFIX}createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv1.bin -opu tmppub1.bin -opem tmppub1.pem -pwdp dp -ecc ${CURVE} > run.out
+    checkSuccess $?
 
-echo "Verify that the two derived keys are the same"
-diff tmppub.bin tmppub1.bin > run.out
-checkSuccess $?
+    echo "Verify that the two derived keys are the same"
+    diff tmppub.bin tmppub1.bin > run.out
+    checkSuccess $?
 
-echo "Flush the signing key 80000002"
-${PREFIX}flushcontext -ha 80000002 > run.out
-checkSuccess $?
+    echo "Flush the signing key 80000002"
+    ${PREFIX}flushcontext -ha 80000002 > run.out
+    checkSuccess $?
+
+done
 
 echo "Flush the derivation parent"
 ${PREFIX}flushcontext -ha 80000001 > run.out

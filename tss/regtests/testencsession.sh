@@ -6,9 +6,8 @@
 #			TPM2 regression test					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#		$Id: testencsession.sh 1277 2018-07-23 20:30:23Z kgoldman $	#
 #										#
-# (c) Copyright IBM Corporation 2015 - 2018					#
+# (c) Copyright IBM Corporation 2015 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -53,7 +52,7 @@ echo "Parameter Encryption - Basic"
 echo ""
 
 echo "Load the signing key under the primary key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 for MODE0 in xor aes
@@ -138,7 +137,7 @@ echo "Salt encrypt and decrypt HMAC sessions"
 echo ""
 
 echo "Load the signing key under the primary key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Start an auth session"
@@ -183,7 +182,7 @@ echo "Bind encrypt and decrypt HMAC sessions"
 echo ""
 
 echo "Load the signing key under the primary key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Start an auth session"
@@ -201,7 +200,7 @@ checkSuccess $?
 for ((i = 0 ; i < 7 ; i++))
 do
 
-    echo "Signing Key Self Certify, three auth, salted parameter encryption ${THREEAUTH0[i]} ${THREEAUTH1[i]} ${THREEAUTH2[i]}"
+    echo "Signing Key Self Certify, three auth, bind parameter encryption ${THREEAUTH0[i]} ${THREEAUTH1[i]} ${THREEAUTH2[i]}"
     ${PREFIX}certify -hk 80000001 -ho 80000001 -pwdk sig -pwdo sig -qd policies/aaa -os sig.bin -oa tmp.bin -se0 02000000 ${THREEAUTH0[i]} -se1 02000001 ${THREEAUTH1[i]} -se2 02000002 ${THREEAUTH2[i]} > run.out
     checkSuccess $?
 
@@ -313,7 +312,7 @@ do
     ${PREFIX}policycommandcode -ha 03000001 -cc 148 > run.out
     checkSuccess $?
 
-    echo "Signing Key Self Certify, three auth, salted parameter encryption ${THREEAUTH0[i]} ${THREEAUTH1[i]} ${THREEAUTH2[i]}"
+    echo "Signing Key Self Certify, three auth, bind parameter encryption ${THREEAUTH0[i]} ${THREEAUTH1[i]} ${THREEAUTH2[i]}"
     ${PREFIX}certify -hk 80000001 -ho 80000001 -pwdo sig -pwdk xxx -qd policies/aaa -os sig.bin -oa tmp.bin -se0 02000000 ${THREEAUTH0[i]} -se1 03000001 ${THREEAUTH1[i]} -se2 02000002 ${THREEAUTH2[i]} > run.out
     checkSuccess $?
 

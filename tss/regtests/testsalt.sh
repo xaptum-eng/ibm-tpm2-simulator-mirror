@@ -6,9 +6,8 @@
 #			TPM2 regression test					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	$Id: testsalt.sh 1277 2018-07-23 20:30:23Z kgoldman $			#
 #										#
-# (c) Copyright IBM Corporation 2015 - 2018					#
+# (c) Copyright IBM Corporation 2015 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -45,7 +44,18 @@ echo ""
 echo "Salt Session - Load"
 echo ""
 
-for ASY in "-rsa" "-ecc nistp256"
+# mbedtls port does not support ECC salted sessions yet
+
+if   [ ${CRYPTOLIBRARY} == "openssl" ]; then
+    SALTALGS=("-rsa 2048" "-rsa 3072" "-ecc nistp256" "-ecc nistp384")
+elif [ ${CRYPTOLIBRARY} == "mbedtls" ]; then
+    SALTALGS=("-rsa 2048")
+else
+    echo "Error: crypto library ${CRYPTOLIBRARY} not supported"
+    exit 255
+fi
+
+for ASY in "${SALTALGS[@]}"
 do
     for HALG in ${ITERATE_ALGS}
     do
@@ -54,7 +64,7 @@ do
 	# used here because the hash algorithm doesn't have to match
 	# that of the parent.
 
-	echo "Create a ${ASY} ${HALG} storage key under the primary key "
+	echo "Create a ${ASY} ${HALG} decryption key under the primary key "
 	${PREFIX}create -hp 80000000 -nalg ${HALG} -halg ${HALG} ${ASY} -deo -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -pwdp sto -pwdk 222 > run.out
 	checkSuccess $?
 
@@ -83,13 +93,13 @@ echo ""
 
 echo "Create RSA and ECC key pairs in PEM format using openssl"
   
-openssl genrsa -out tmpkeypairrsa.pem -aes256 -passout pass:rrrr 2048 > run.out
-openssl ecparam -name prime256v1 -genkey -noout -out tmpkeypairecc.pem > run.out
+openssl genrsa -out tmpkeypairrsa.pem -aes256 -passout pass:rrrr 2048 > run.out 2>&1
+openssl ecparam -name prime256v1 -genkey -noout -out tmpkeypairecc.pem > run.out 2>&1
 
 echo "Convert key pair to plaintext DER format"
 
-openssl rsa -inform pem -outform der -in tmpkeypairrsa.pem -out tmpkeypairrsa.der -passin pass:rrrr > run.out
-openssl ec -inform pem -outform der -in tmpkeypairecc.pem -out tmpkeypairecc.der -passin pass:rrrr > run.out
+openssl rsa -inform pem -outform der -in tmpkeypairrsa.pem -out tmpkeypairrsa.der -passin pass:rrrr > run.out 2>&1
+openssl ec -inform pem -outform der -in tmpkeypairecc.pem -out tmpkeypairecc.der -passin pass:rrrr > run.out 2>&1
 
 for HALG in ${ITERATE_ALGS}
 do
@@ -112,26 +122,28 @@ do
 
 done
 
-for HALG in ${ITERATE_ALGS}
-do
+if [ ${CRYPTOLIBRARY} == "openssl" ]; then
+    for HALG in ${ITERATE_ALGS}
+    do
 
-    echo "Load the ECC openssl key pair in the NULL hierarchy 80000001 - ${HALG}"
-    ${PREFIX}loadexternal -ecc -halg ${HALG} -st -ider tmpkeypairecc.der > run.out
-    checkSuccess $?
+	echo "Load the ECC openssl key pair in the NULL hierarchy 80000001 - ${HALG}"
+	${PREFIX}loadexternal -ecc -halg ${HALG} -st -ider tmpkeypairecc.der > run.out
+	checkSuccess $?
 
-    echo "Start a salted HMAC auth session"
-    ${PREFIX}startauthsession -se h -hs 80000001 > run.out
-    checkSuccess $?
+	echo "Start a salted HMAC auth session"
+	${PREFIX}startauthsession -se h -hs 80000001 > run.out
+	checkSuccess $?
 
-    echo "Create a signing key using the salt"
-    ${PREFIX}create -hp 80000000 -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -pwdp sto -pwdk 333 -se0 02000000 0 > run.out
-    checkSuccess $?
+	echo "Create a signing key using the salt"
+	${PREFIX}create -hp 80000000 -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -pwdp sto -pwdk 333 -se0 02000000 0 > run.out
+	checkSuccess $?
 
-    echo "Flush the storage key"
-    ${PREFIX}flushcontext -ha 80000001 > run.out
-    checkSuccess $?
+	echo "Flush the storage key"
+	${PREFIX}flushcontext -ha 80000001 > run.out
+	checkSuccess $?
 
-done
+    done
+fi
 
 echo ""
 echo "Salt Session - CreatePrimary storage key"
@@ -192,7 +204,7 @@ echo "Salt Session - EvictControl"
 echo ""
 
 echo "Load the storage key"
-${PREFIX}load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Make the storage key persistent"
@@ -220,7 +232,7 @@ echo "Salt Session - ContextSave and ContextLoad"
 echo ""
 
 echo "Load the storage key at 80000001"
-${PREFIX}load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Save context for the key at 80000001"
@@ -252,7 +264,7 @@ echo "Salt Audit Session - PCR Read, Read Public, NV Read Public"
 echo ""
 
 echo "Load the storage key at 80000001"
-${PREFIX}load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Start a salted HMAC auth session"
@@ -285,6 +297,46 @@ checkSuccess $?
 
 echo "NV undefine space"
 ${PREFIX}nvundefinespace -ha 01000000 -hi p > run.out
+checkSuccess $?
+
+echo ""
+echo "Salt Policy Session with policyauthvalue"
+echo ""
+
+echo "Load the RSA storage key 80000001 under the primary key 80000000"
+${PREFIX}load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
+checkSuccess $?
+
+echo "Start a salted policy session"
+${PREFIX}startauthsession -se p -hs 80000001 > run.out
+checkSuccess $?
+
+echo "Policy command code - create"
+${PREFIX}policycommandcode -ha 03000000 -cc 153 > run.out
+checkSuccess $?
+
+echo "Policy authvalue"
+${PREFIX}policyauthvalue -ha 03000000 > run.out
+checkSuccess $?
+
+echo "Create a signing key using the salt"
+${PREFIX}create -hp 80000001 -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -pwdp sto -se0 03000000 0 > run.out
+checkSuccess $?
+
+echo "Flush the storage key 80000001"
+${PREFIX}flushcontext -ha 80000001 > run.out
+checkSuccess $?
+
+echo ""
+echo "Salt Policy Session with no policyauthvalue"
+echo ""
+
+echo "Start a salted policy session"
+${PREFIX}startauthsession -se p -hs 80000000 > run.out
+checkSuccess $?
+
+echo "Create a signing key using the salt"
+${PREFIX}create -hp 80000000 -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -se0 03000000 0 > run.out
 checkSuccess $?
 
 rm -f tmpkeypairrsa.pem

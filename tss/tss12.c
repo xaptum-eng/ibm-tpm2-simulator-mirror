@@ -3,9 +3,8 @@
 /*			    TSS Primary API for TPM 1.2				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tss12.c 1294 2018-08-09 19:08:34Z kgoldman $			*/
 /*										*/
-/* (c) Copyright IBM Corporation 2018.						*/
+/* (c) Copyright IBM Corporation 2018 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -168,6 +167,7 @@ static const TSS_TABLE tssTable [] = {
 				 
     {TPM_ORD_Init, NULL, NULL, NULL},
     {TPM_ORD_ActivateIdentity, NULL, NULL, NULL},
+    {TPM_ORD_ContinueSelfTest, NULL, NULL, NULL},
     {TPM_ORD_CreateWrapKey, (TSS_PreProcessFunction_t)TSS_PR_CreateWrapKey, NULL, NULL},
     {TPM_ORD_CreateEndorsementKeyPair, NULL, NULL, NULL},
     {TPM_ORD_Extend, NULL, NULL, NULL},
@@ -1134,11 +1134,11 @@ static TPM_RC TSS_PR_CreateWrapKey(TSS_CONTEXT *tssContext,
     }
     if (rc == 0) {
 	if (tssVverbose) printf("TSS_PR_CreateWrapKey: ADIP offset at %lu and %lu\n",
-				sizeof(TPM_TAG) + sizeof(UINT32) + sizeof(TPM_RESULT) +
-				sizeof(TPM_KEY_HANDLE),
-				sizeof(TPM_TAG) + sizeof(UINT32) + sizeof(TPM_RESULT) +
-				sizeof(TPM_KEY_HANDLE) +
-				SHA1_DIGEST_SIZE);
+				(unsigned long)(sizeof(TPM_TAG) + sizeof(UINT32) + sizeof(TPM_RESULT) +
+						sizeof(TPM_KEY_HANDLE)),
+				(unsigned long)(sizeof(TPM_TAG) + sizeof(UINT32) + sizeof(TPM_RESULT) +
+						sizeof(TPM_KEY_HANDLE) +
+						SHA1_DIGEST_SIZE));
     }
     return rc;
 }
@@ -1161,7 +1161,7 @@ static TPM_RC TSS_PR_MakeIdentity(TSS_CONTEXT *tssContext,
     }
     if (rc == 0) {
 	if (tssVverbose) printf("TSS_PR_MakeIdentity: ADIP offset at %lu\n",
-				sizeof(TPM_TAG) + sizeof(UINT32) + sizeof(TPM_RESULT));
+				(unsigned long)(sizeof(TPM_TAG) + sizeof(UINT32) + sizeof(TPM_RESULT)));
     }
     return rc;
 }
@@ -1356,6 +1356,7 @@ static TPM_RC TSS_PO_OSAP(TSS_CONTEXT *tssContext,
     TPM_RC 		rc = 0;
     TSS_HMAC12_CONTEXT 	*session = NULL;
     TPM2B_KEY		hmacKey;
+    TPMT_HA 		usageAuth;		/* digest of the OSAP password */
 
     /* allocate a TSS_HMAC_CONTEXT session context */
     if (rc == 0) {
@@ -1371,7 +1372,6 @@ static TPM_RC TSS_PO_OSAP(TSS_CONTEXT *tssContext,
 	memcpy(session->nonceEvenOSAP, out->nonceEvenOSAP, SHA1_DIGEST_SIZE);
     }
     /* SHA1 hash the usageAuth */
-    TPMT_HA 			usageAuth;		/* digest of the OSAP password */
     if (rc == 0) {
 	if (extra->usagePassword != NULL) {	/* if a password was specified, hash it */
 	    usageAuth.hashAlg = TPM_ALG_SHA1;

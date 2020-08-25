@@ -3,9 +3,8 @@
 /*		     	TPM2 Measurement Log Common Routines			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: eventlib.h 1257 2018-06-27 20:52:08Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2016, 2017.					*/
+/* (c) Copyright IBM Corporation 2016 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -45,7 +44,6 @@
 #include <string.h>
 #include <stdint.h>
 
-#define TPM_TSS
 #include <ibmtss/TPM_Types.h>
 
 #define TCG_EVENT_LEN_MAX	0x10000
@@ -147,31 +145,49 @@ typedef struct tdTCG_EfiSpecIdEvent {
 extern "C" {
 #endif
 
+#ifndef TPM_TSS_NOFILE
     int TSS_EVENT_Line_Read(TCG_PCR_EVENT *event,
 			    int *endOfFile,
 			    FILE *inFile);
 
+#endif /* TPM_TSS_NOFILE */
     TPM_RC TSS_EVENT_Line_Marshal(TCG_PCR_EVENT *source,
 				  uint16_t *written, uint8_t **buffer, uint32_t *size);
     
     TPM_RC TSS_EVENT_Line_Unmarshal(TCG_PCR_EVENT *event, BYTE **buffer, uint32_t *size);
 
+    TPM_RC TSS_EVENT_Line_LE_Unmarshal(TCG_PCR_EVENT *target, BYTE **buffer, uint32_t *size);
+
+#ifndef TPM_TSS_NOCRYPTO                                                         
+
     TPM_RC TSS_EVENT_PCR_Extend(TPMT_HA pcrs[IMPLEMENTATION_PCR],
 				TCG_PCR_EVENT *event);
-    
+#endif /* TPM_TSS_NOCRYPTO */    
+
     void TSS_EVENT_Line_Trace(TCG_PCR_EVENT *event);
 
+#ifndef TPM_TSS_NOFILE
     int TSS_EVENT2_Line_Read(TCG_PCR_EVENT2 *event2,
 			     int *endOfFile,
 			     FILE *inFile);
 
+#endif /* TPM_TSS_NOFILE */
     TPM_RC TSS_EVENT2_Line_Marshal(TCG_PCR_EVENT2 *source, uint16_t *written,
 				   uint8_t **buffer, uint32_t *size);
 
+    TPM_RC TSS_EVENT2_Line_LE_Marshal(TCG_PCR_EVENT2 *source, uint16_t *written,
+				   uint8_t **buffer, uint32_t *size);
+
+
     TPM_RC TSS_EVENT2_Line_Unmarshal(TCG_PCR_EVENT2 *target, BYTE **buffer, uint32_t *size);
 
+    TPM_RC TSS_EVENT2_Line_LE_Unmarshal(TCG_PCR_EVENT2 *target, BYTE **buffer, uint32_t *size);
+
+
+#ifndef TPM_TSS_NOCRYPTO
     TPM_RC TSS_EVENT2_PCR_Extend(TPMT_HA pcrs[HASH_COUNT][IMPLEMENTATION_PCR],
 				 TCG_PCR_EVENT2 *event2);
+#endif
 
     void TSS_EVENT2_Line_Trace(TCG_PCR_EVENT2 *event);
 
@@ -182,6 +198,12 @@ extern "C" {
     void TSS_SpecIdEvent_Trace(TCG_EfiSpecIDEvent *specIdEvent);
 
     const char *TSS_EVENT_EventTypeToString(uint32_t eventType);
+
+    TPM_RC TSS_UINT32LE_Marshal(const UINT32 *source, uint16_t *written,
+                                BYTE **buffer, uint32_t *size);
+
+    TPM_RC TSS_UINT16LE_Marshalu(const UINT16 *source, uint16_t *written,
+                                 BYTE **buffer, uint32_t *size);
 
 #ifdef __cplusplus
 }

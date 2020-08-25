@@ -1,11 +1,10 @@
 #################################################################################
 #										#
-#			Windows MinGW TPM2 Makefile				#
+#			Windows MinGW TPM2 Makefile OpenSSL 1.1.1 32-bit	#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	      $Id: makefile.mak 1309 2018-08-21 20:40:41Z kgoldman $		#
 #										#
-# (c) Copyright IBM Corporation 2015, 2018					#
+# (c) Copyright IBM Corporation 2015 - 2019					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -38,6 +37,15 @@
 #										#
 #################################################################################
 
+# Windows OpenSSL 1.1.1 32-bit with mingw
+
+# Please contribute a solution for OpenSSL 64-bit (Shining Light),
+# which does not include the mingw .a files.
+
+# For this to work, copy the file .../openssl/bin/libcrypto-1.1.dll to
+# libcrypto.dll.  Please contribute a solution that does not require
+# this step.
+
 # C compiler
 
 CC = "c:/program files/mingw/bin/gcc.exe"
@@ -65,8 +73,6 @@ CCAFLAGS += 			\
 LNFLAGS +=					\
 	-D_MT					\
 	-DTPM_WINDOWS				\
-	-I"c:/program files/MinGW/include"	\
-	-I"c:/program files/openssl/include"	\
 	-I.
 
 # link - for TSS library
@@ -77,8 +83,7 @@ LNLFLAGS +=
 
 LNAFLAGS += 
 
-LNLIBS = 	"c:/program files/openssl/lib/mingw/libeay32.a" \
-		"c:/program files/openssl/lib/mingw/ssleay32.a" \
+LNLIBS = 	"c:/program files/openssl/lib/mingw/libcrypto.a" \
 		"c:/program files/MinGW/lib/libws2_32.a"
 
 # shared library
@@ -105,20 +110,35 @@ TSS_OBJS = 	tssfile.o 		\
 include makefile-common
 include makefile-common20
 
-# Uncomment for TBSI
+#
+# Start Windows TBSI
+#
 
-# CCFLAGS +=	-DTPM_WINDOWS_TBSI		\
-# 		-DTPM_WINDOWS_TBSI_WIN8		\
-# 		-D_WIN32_WINNT=0x0600
+# mingw libraries are apparently no longer compatible with Windows
+# Kits for TBS.  Contributions are welcome.  Until then, use the
+# Visual Studio solution for the hardware TPM.
 
-# or 
-# 		-DTPM_WINDOWS_TBSI_WIN7		\
+#TSS_OBJS += tsstbsi.o
 
+#CCFLAGS +=	-DTPM_WINDOWS_TBSI
+#CCFLAGS +=	-D_WIN32_WINNT=0x0600
 
-# TSS_OBJS += tsstbsi.o 
+# Windows 10
 
-# LNLIBS += C:\PROGRA~2\WI3CF2~1\8.0\Lib\win8\um\x86\Tbs.lib
-# #LNLIBS += c:/progra~1/Micros~2/Windows/v7.1/lib/Tbs.lib
+#CCFLAGS +=	-DTPM_WINDOWS_TBSI_WIN8
+#CCFLAGS +=	-I"c:\Program Files (x86)\Windows Kits\10\Include\10.0.17763.0\shared"
+
+#LNLIBS += "c:/Program Files (x86)/Windows Kits/10/Lib/10.0.17763.0/um/x64/tbs.lib"
+
+# Windows 7
+
+#CCFLAGS +=	-DTPM_WINDOWS_TBSI_WIN7
+
+#LNLIBS += c:/progra~1/Micros~2/Windows/v7.1/lib/Tbs.lib
+
+#
+# End Windows TBSI
+#
 
 # default build target
 
@@ -195,13 +215,16 @@ createloaded.exe:	createloaded.o objecttemplates.o cryptoutils.o $(LIBTSS)
 createprimary.exe:	createprimary.o objecttemplates.o cryptoutils.o $(LIBTSS) 
 		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o objecttemplates.o cryptoutils.o $(LNLIBS) $(LIBTSS) 
 
-eventextend.exe:	eventextend.o eventlib.o $(LIBTSS) 
-		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o eventlib.o $(LNLIBS) $(LIBTSS) 
+eventextend.exe:	eventextend.o eventlib.o cryptoutils.o $(LIBTSS) 
+		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o eventlib.o cryptoutils.o $(LNLIBS) $(LIBTSS) 
 
-imaextend.exe:	imaextend.o imalib.o $(LIBTSS) 
-		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o imalib.o $(LNLIBS) $(LIBTSS) 
+imaextend.exe:	imaextend.o imalib.o cryptoutils.o $(LIBTSS) 
+		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o imalib.o cryptoutils.o $(LNLIBS) $(LIBTSS) 
 
 createek.exe:	createek.o ekutils.o cryptoutils.o $(LIBTSS) 
+		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o ekutils.o cryptoutils.o $(LNLIBS) $(LIBTSS)
+
+certifyx509.exe:	certifyx509.o ekutils.o cryptoutils.o $(LIBTSS) 
 		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o ekutils.o cryptoutils.o $(LNLIBS) $(LIBTSS)
 
 createekcert.exe:	createekcert.o ekutils.o cryptoutils.o $(LIBTSS) 
@@ -219,34 +242,14 @@ nvread.exe:	nvread.o ekutils.o cryptoutils.o $(LIBTSS)
 nvwrite.exe:	nvwrite.o ekutils.o cryptoutils.o $(LIBTSS)
 		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o ekutils.o cryptoutils.o $(LNLIBS) $(LIBTSS)
 
-readpublic.exe:	readpublic.o cryptoutils.o $(LIBTSS)
-		$(CC) $(LNFLAGS) -L. -libmtss  $< -o $@ applink.o cryptoutils.o $(LNLIBS) $(LIBTSS)
-
-sign.exe:	sign.o cryptoutils.o $(LIBTSS)
-		$(CC) $(LNFLAGS) -L. -libmtss  $< -o $@ applink.o cryptoutils.o $(LNLIBS) $(LIBTSS)
-
-verifysignature.exe:	verifysignature.o cryptoutils.o $(LIBTSS)
-		$(CC) $(LNFLAGS) -L. -libmtss  $< -o $@ applink.o cryptoutils.o $(LNLIBS) $(LIBTSS)
-
-zgen2phase.exe:	zgen2phase.o cryptoutils.o $(LIBTSS)
-		$(CC) $(LNFLAGS) -L. -libmtss  $< -o $@ applink.o cryptoutils.o $(LNLIBS) $(LIBTSS)
-
 signapp.exe:	signapp.o ekutils.o cryptoutils.o $(LIBTSS)
 		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o ekutils.o cryptoutils.o $(LNLIBS) $(LIBTSS)
 
 writeapp.exe:	writeapp.o ekutils.o cryptoutils.o $(LIBTSS)
 		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o ekutils.o cryptoutils.o $(LNLIBS) $(LIBTSS)
 
-tpm2pem.exe:	tpm2pem.o cryptoutils.o $(LIBTSS)
+%.exe:		%.o applink.o cryptoutils.o $(LIBTSS)
 		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o cryptoutils.o $(LNLIBS) $(LIBTSS)
-
-tpmpublic2eccpoint.exe:	tpmpublic2eccpoint.o $(LIBTSS)
-		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o $(LNLIBS) $(LIBTSS)
-
-		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o ekutils.o cryptoutils.o $(LNLIBS) $(LIBTSS)
-
-%.exe:		%.o applink.o $(LIBTSS)
-		$(CC) $(LNFLAGS) -L. -libmtss $< -o $@ applink.o $(LNLIBS) $(LIBTSS)
 
 %.o:		%.c
 		$(CC) $(CCFLAGS) $(CCAFLAGS) $< -o $@

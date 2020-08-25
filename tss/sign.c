@@ -3,9 +3,8 @@
 /*			    Sign						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: sign.c 1324 2018-08-31 16:36:12Z kgoldman $			*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -46,7 +45,12 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <openssl/rsa.h>
+/* Windows 10 crypto API clashes with openssl */
+#ifdef TPM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
@@ -60,7 +64,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -92,7 +96,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hk") == 0) {
@@ -140,15 +145,28 @@ int main(int argc, char *argv[])
 		printUsage();
 	    }
 	}
-	else if (strcmp(argv[i], "-rsa") == 0) {
-	    scheme = TPM_ALG_RSASSA;
+	else if (strcmp(argv[i],"-salg") == 0) {
+	    i++;
+	    if (i < argc) {
+		if (strcmp(argv[i],"rsa") == 0) {
+		    scheme = TPM_ALG_RSASSA;
+		}
+		else if (strcmp(argv[i],"ecc") == 0) {
+		    scheme = TPM_ALG_ECDSA;
+		}
+		else if (strcmp(argv[i],"hmac") == 0) {
+		    scheme = TPM_ALG_HMAC;
+		}
+		else {
+		    printf("Bad parameter %s for -salg\n", argv[i]);
+		    printUsage();
+		}
+	    }
+	    else {
+		printf("-salg option needs a value\n");
+		printUsage();
+	    }
 	}
-	else if (strcmp(argv[i], "-ecc") == 0) {
-	    scheme = TPM_ALG_ECDSA;
-	}
-	else if (strcmp(argv[i], "-ecdaa") == 0) {
-	    scheme = TPM_ALG_ECDAA;
-        }	
 	else if (strcmp(argv[i],"-scheme") == 0) {
             i++;
 	    if (i < argc) {
@@ -157,6 +175,15 @@ int main(int argc, char *argv[])
 		}
 		else if (strcmp(argv[i],"rsapss") == 0) {
 		    scheme = TPM_ALG_RSAPSS;
+		}
+		else if (strcmp(argv[i],"ecdsa") == 0) {
+		    scheme = TPM_ALG_ECDSA;
+		}
+		else if (strcmp(argv[i],"ecdaa") == 0) {
+		    scheme = TPM_ALG_ECDAA;
+		}
+		else if (strcmp(argv[i],"hmac") == 0) {
+		    scheme = TPM_ALG_HMAC;
 		}
 		else {
 		    printf("Bad parameter %s for -scheme\n", argv[i]);
@@ -284,7 +311,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -382,14 +409,14 @@ int main(int argc, char *argv[])
     }
     if ((rc == 0) && (signatureFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.signature,
-				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshal,
+				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshalu,
 				     signatureFilename);
     }
     /* if a public key was specified, use openssl to verify the signature using an openssl RSA
        format key token */
     if (publicKeyFilename != NULL) {
 	TPM2B_PUBLIC 	public;
-	RSA         	*rsaPubKey = NULL;
+	void         	*rsaPubKey = NULL;
 	if (rc == 0) {
 	    rc = TSS_File_ReadStructureFlag(&public,
 					    (UnmarshalFunctionFlag_t)TSS_TPM2B_PUBLIC_Unmarshalu,
@@ -399,7 +426,7 @@ int main(int argc, char *argv[])
 	/* construct the OpenSSL RSA public key token */
 	if (rc == 0) {
 	    unsigned char earr[3] = {0x01, 0x00, 0x01};
-	    rc = TSS_RSAGeneratePublicToken
+	    rc = TSS_RSAGeneratePublicTokenI
 		 (&rsaPubKey,					/* freed @2 */
 		  public.publicArea.unique.rsa.t.buffer, 	/* public modulus */
 		  public.publicArea.unique.rsa.t.size,
@@ -417,13 +444,11 @@ int main(int argc, char *argv[])
 					   rsaPubKey);
 
 	}
-	if (rsaPubKey != NULL) {
-	    RSA_free(rsaPubKey); 	/* @2 */
-	}
+	TSS_RsaFree(rsaPubKey); 		/* @2 */
     }
-    free(data);				/* @1 */
+    free(data);					/* @1 */
     if (rc == 0) {
-	if (verbose) printf("sign: success\n");
+	if (tssUtilsVerbose) printf("sign: success\n");
     }
     else {
 	const char *msg;
@@ -448,10 +473,9 @@ static void printUsage(void)
     printf("\t-if\tinput message to hash and sign\n");
     printf("\t[-pwdk\tpassword for key (default empty)]\n");
     printf("\t[-halg\t(sha1, sha256, sha384, sha512) (default sha256)]\n");
-    printf("\t[-rsa\t(default)]\n");
-    printf("\t[-scheme  RSA signing scheme (rsassa rsapss) (default rsassa)]\n");
-    printf("\t[-ecc\t ECDSA signing scheme]\n");
-    printf("\t[-ecdaa\t ECDAA signing scheme]\n");
+    printf("\t[-salg\tsignature algorithm (rsa, ecc, hmac) (default rsa)]\n");
+    printf("\t[-scheme signing scheme (rsassa, rsapss, ecdsa, ecdaa, hmac)]\n");
+    printf("\t\t(default rsassa, ecdsa, hmac)]\n");
     printf("\t[-cf\tinput counter file (commit count required for ECDAA scheme]\n");
     printf("\t[-ipu\tpublic key file name to verify signature (default no verify)]\n");
     printf("\t\tVerify only supported for RSA now\n");

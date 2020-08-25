@@ -3,9 +3,8 @@
 /*			     TSS Error Codes					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tsserror.h 1257 2018-06-27 20:52:08Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -59,6 +58,7 @@
 #define TSS_RC_MALFORMED_RESPONSE	0x000b000a	/* A response packet was fundamentally malformed */
 #define TSS_RC_NULL_PARAMETER		0x000b000b	/* A required parameter was NULL */
 #define TSS_RC_NOT_IMPLEMENTED		0x000b000c	/* TSS function is not implemented */
+#define TSS_RC_BAD_READ_VALUE		0x000b000d	/* Actual read value different from expected */
 #define	TSS_RC_FILE_OPEN		0x000b0010	/* The file could not be opened */
 #define	TSS_RC_FILE_SEEK		0x000b0011	/* A file seek failed */
 #define	TSS_RC_FILE_FTELL		0x000b0012	/* A file ftell failed */
@@ -101,6 +101,7 @@
 #define TSS_RC_EC_KEY_CONVERT		0x000b007c	/* EC key conversion failed */
 #define TSS_RC_BAD_SIGNATURE_ALGORITHM	0x000b007d	/* Unimplemented signature algorithm */
 #define TSS_RC_X509_ERROR		0x000b007e	/* X509 parse error */
+#define TSS_RC_PEM_ERROR		0x000b007f	/* PEM parse error */
 #define TSS_RC_COMMAND_UNIMPLEMENTED	0x000b0080	/* Unimplemented command */
 #define TSS_RC_IN_PARAMETER		0x000b0081	/* Bad in parameter to TSS_Execute */
 #define TSS_RC_OUT_PARAMETER		0x000b0082	/* Bad out parameter to TSS_Execute */

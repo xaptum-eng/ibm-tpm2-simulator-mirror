@@ -3,9 +3,8 @@
 /*			    Commit						*/
 /*	     		Written by Bill Martin 					*/
 /*                 Green Hills Integrity Software Services 			*/
-/*	      $Id: commit.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2017 - 2018					*/
+/* (c) Copyright IBM Corporation 2017 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -57,7 +56,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -85,7 +84,8 @@ int main(int argc, char *argv[])
  
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     objectAttributes.val = 0;
     objectAttributes.val |= TPMA_OBJECT_NODA;
@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -324,35 +324,35 @@ int main(int argc, char *argv[])
     }
     if ((rc == 0) && (Kfilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.K,
-				     (MarshalFunction_t)TSS_TPM2B_ECC_POINT_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_ECC_POINT_Marshalu,
 				     Kfilename);
 
 
     }
     if ((rc == 0) && (Lfilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.L,
-				     (MarshalFunction_t)TSS_TPM2B_ECC_POINT_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_ECC_POINT_Marshalu,
 				     Lfilename);
 
 
     }
     if ((rc == 0) && (Efilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.E,
-				     (MarshalFunction_t)TSS_TPM2B_ECC_POINT_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_ECC_POINT_Marshalu,
 				     Efilename);
 
 
     }
     if (rc == 0) {
-	if (verbose) printf("counter is %d\n", out.counter);
+	if (tssUtilsVerbose) printf("counter is %d\n", out.counter);
         if (counterFilename != NULL)  {
 	    rc = TSS_File_WriteStructure(&out.counter,
-					 (MarshalFunction_t)TSS_UINT16_Marshal,
+					 (MarshalFunction_t)TSS_UINT16_Marshalu,
 					 counterFilename);
         }
     } 
     if (rc == 0) {
-	if (verbose) printf("commit: success\n");
+	if (tssUtilsVerbose) printf("commit: success\n");
     }
     else {
 	const char *msg;

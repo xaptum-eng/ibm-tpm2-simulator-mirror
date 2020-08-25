@@ -3,9 +3,8 @@
 /*			    Hash						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: hash.c 1294 2018-08-09 19:08:34Z kgoldman $			*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018					*/
+/* (c) Copyright IBM Corporation 2015 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -54,7 +53,7 @@
 static void printUsage(void);
 static void printHash(Hash_Out *out);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -77,7 +76,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hi") == 0) {
@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
     }
     if (inFilename != NULL) {
 	if (rc == 0) {
-	    rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	    rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 					 &length,
 					 inFilename);
 	}
@@ -259,12 +259,11 @@ int main(int argc, char *argv[])
     }
     if ((rc == 0) && (ticketFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.validation,
-				     (MarshalFunction_t)TSS_TPMT_TK_HASHCHECK_Marshal,
+				     (MarshalFunction_t)TSS_TPMT_TK_HASHCHECK_Marshalu,
 				     ticketFilename);
     }
-    free(buffer);
     if (rc == 0) {
-	if (verbose) printHash(&out);
+	if (tssUtilsVerbose) printHash(&out);
 	if (noSpace) {
 	    uint32_t bp;
 	    for (bp = 0 ; bp < out.outHash.t.size ; bp++) {
@@ -272,7 +271,7 @@ int main(int argc, char *argv[])
 	    }
 	    printf("\n");
 	}
-	if (verbose) printf("hash: success\n");
+	if (tssUtilsVerbose) printf("hash: success\n");
     }
     else {
 	const char *msg;
@@ -283,6 +282,7 @@ int main(int argc, char *argv[])
 	printf("%s%s%s\n", msg, submsg, num);
 	rc = EXIT_FAILURE;
     }
+    free(buffer);	/* @1 */
     return rc;
 }
 

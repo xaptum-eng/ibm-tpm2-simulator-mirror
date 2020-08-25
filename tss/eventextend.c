@@ -3,9 +3,8 @@
 /*		      Extend an EVENT measurement file into PCRs		*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: eventextend.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2016 - 2018.					*/
+/* (c) Copyright IBM Corporation 2016 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -55,7 +54,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char * argv[])
 {
@@ -70,7 +69,7 @@ int main(int argc, char * argv[])
     int				noSpace = FALSE;
     uint32_t 			bankNum = 0;	/* PCR hash bank */
     unsigned int 		pcrNum = 0;	/* PCR number iterator */
-    TPM_PCRINDEX 		pcrMax = 7;
+    TPMI_DH_PCR 		pcrMax = 7;
     TPMT_HA 			simPcrs[HASH_COUNT][IMPLEMENTATION_PCR];
     TPMT_HA 			bootAggregates[HASH_COUNT];
     TCG_PCR_EVENT2 		event2;			/* TPM 2.0 event log entry */
@@ -81,7 +80,8 @@ int main(int argc, char * argv[])
 	
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     for (i=1 ; i<argc ; i++) {
 	if (strcmp(argv[i],"-if") == 0) {
 	    i++;
@@ -120,7 +120,7 @@ int main(int argc, char * argv[])
 	    printUsage();
 	}
 	else if (!strcmp(argv[i], "-v")) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -154,7 +154,7 @@ int main(int argc, char * argv[])
 	rc = TSS_EVENT_Line_Read(&event, &endOfFile, infile);
     }
     /* debug tracing */
-    if ((rc == 0) && !nospec && !endOfFile && verbose) {
+    if ((rc == 0) && !nospec && !endOfFile && tssUtilsVerbose) {
 	printf("\neventextend: line 0\n");
 	TSS_EVENT_Line_Trace(&event);
     }
@@ -163,8 +163,16 @@ int main(int argc, char * argv[])
 	rc = TSS_SpecIdEvent_Unmarshal(&specIdEvent,
 				       event.eventDataSize, event.event);
     }
+    /* range check numberOfAlgorithms before the trace */
+    if ((rc == 0) && !nospec && !endOfFile) {
+	if (specIdEvent.numberOfAlgorithms > HASH_COUNT) {
+	    printf("specIdEvent.numberOfAlgorithms %u greater than %u\n",
+		   specIdEvent.numberOfAlgorithms, HASH_COUNT);
+	    rc = TSS_RC_BAD_PROPERTY_VALUE;
+	}
+    }
     /* trace the specIdEvent event */
-    if ((rc == 0) && !nospec && !endOfFile && verbose) {
+    if ((rc == 0) && !nospec && !endOfFile && tssUtilsVerbose) {
 	TSS_SpecIdEvent_Trace(&specIdEvent);
     }
     /* Start a TSS context */
@@ -198,7 +206,7 @@ int main(int argc, char * argv[])
 	    rc = TSS_EVENT2_Line_Read(&event2, &endOfFile, infile);
 	}
 	/* debug tracing */
-	if ((rc == 0) && !endOfFile && verbose) {
+	if ((rc == 0) && !endOfFile && tssUtilsVerbose) {
 	    printf("\neventextend: line %u\n", lineNum);
 	    TSS_EVENT2_Line_Trace(&event2);
 	}
@@ -225,7 +233,7 @@ int main(int argc, char * argv[])
 				 TPM_RH_NULL, NULL, 0);
 	    }
 	    /* for debug, read back and trace the PCR value after the extend */
-	    if ((rc == 0) && verbose) {
+	    if ((rc == 0) && tssUtilsVerbose) {
 		pcrReadIn.pcrSelectionIn.count = 1;
 		pcrReadIn.pcrSelectionIn.pcrSelections[0].hash =
 		    event2.digests.digests[0].hashAlg;
@@ -243,7 +251,7 @@ int main(int argc, char * argv[])
 				 TPM_CC_PCR_Read,
 				 TPM_RH_NULL, NULL, 0);
 	    }
-	    if ((rc == 0) && verbose) {
+	    if ((rc == 0) && tssUtilsVerbose) {
 		TSS_PrintAll("PCR digest",
 			     pcrReadOut.pcrValues.digests[0].t.buffer,
 			     pcrReadOut.pcrValues.digests[0].t.size);
@@ -346,7 +354,7 @@ int main(int argc, char * argv[])
 	}
     }
     if (rc == 0) {
-	if (verbose) printf("eventextend: success\n");
+	if (tssUtilsVerbose) printf("eventextend: success\n");
     }
     else {
 	const char *msg;

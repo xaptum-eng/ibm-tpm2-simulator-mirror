@@ -3,9 +3,8 @@
 /*		    TPM public key TPM2B_PUBLIC to PEM 				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tpm2pem.c 1324 2018-08-31 16:36:12Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2016 - 2018					*/
+/* (c) Copyright IBM Corporation 2016 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -44,11 +43,13 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/bn.h>
+/* Windows 10 crypto API clashes with openssl */
+#ifdef TPM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 
-/* #include <ibmtss/tss.h> */
 #include <ibmtss/tsserror.h>
 #include <ibmtss/tssutils.h>
 #include <ibmtss/tsscrypto.h>
@@ -59,7 +60,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -69,6 +70,7 @@ int main(int argc, char *argv[])
     const char			*pemFilename = NULL;
     TPM2B_PUBLIC 		public;
 
+    tssUtilsVerbose = FALSE;
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-ipu") == 0) {
 	    i++;
@@ -94,7 +96,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	}
 	else {
 	    printf("\n%s is not a valid option\n", argv[i]);
@@ -121,7 +123,7 @@ int main(int argc, char *argv[])
 	rc = convertPublicToPEM(&public, pemFilename);
     }
     if (rc == 0) {
-	if (verbose) printf("tpm2pem: success\n");
+	if (tssUtilsVerbose) printf("tpm2pem: success\n");
     }
     else {
 	const char *msg;

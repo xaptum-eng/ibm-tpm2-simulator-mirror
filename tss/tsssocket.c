@@ -78,7 +78,7 @@ static uint32_t TSS_Socket_SendCommand(TSS_CONTEXT *tssContext,
 				       const uint8_t *buffer, uint16_t length,
 				       const char *message);
 static uint32_t TSS_Socket_SendPlatform(TSS_SOCKET_FD sock_fd, uint32_t command, const char *message);
-static uint32_t TSS_Socket_ReceiveCommand(TSS_CONTEXT *tssContext, uint8_t *buffer, uint32_t *length);
+static uint32_t TSS_Socket_ReceiveResponse(TSS_CONTEXT *tssContext, uint8_t *buffer, uint32_t *length);
 static uint32_t TSS_Socket_ReceivePlatform(TSS_SOCKET_FD sock_fd);
 static uint32_t TSS_Socket_ReceiveBytes(TSS_SOCKET_FD sock_fd, uint8_t *buffer, uint32_t nbytes);
 static uint32_t TSS_Socket_SendBytes(TSS_SOCKET_FD sock_fd, const uint8_t *buffer, size_t length);
@@ -86,7 +86,10 @@ static uint32_t TSS_Socket_SendBytes(TSS_SOCKET_FD sock_fd, const uint8_t *buffe
 static uint32_t TSS_Socket_GetServerType(TSS_CONTEXT *tssContext,
 					 int *mssim,
 					 int *rawsingle);
-
+#ifdef TPM_WINDOWS
+static void TSS_Socket_PrintError(int err);
+#endif
+    
 extern int tssVverbose;
 extern int tssVerbose;
 
@@ -130,6 +133,48 @@ TPM_RC TSS_Socket_TransmitPlatform(TSS_CONTEXT *tssContext,
     return rc;
 }
 
+/* TSS_Socket_TransmitCommand() transmits MS simulator in band administrative commands */
+
+TPM_RC TSS_Socket_TransmitCommand(TSS_CONTEXT *tssContext,
+				  uint32_t command, const char *message)
+{
+    TPM_RC 	rc = 0;
+    int 	mssim;	/* boolean, true for MS simulator packet format, false for raw packet
+			   format */
+    int 	rawsingle = FALSE;	/* boolean, true for raw format with an open and close per
+					   command */
+    /* open on first transmit */
+    if (tssContext->tssFirstTransmit) {	
+	/* detect errors before starting, get the server packet type, MS sim or raw */
+	if (rc == 0) {
+	    rc = TSS_Socket_GetServerType(tssContext, &mssim, &rawsingle);
+	}
+	/* the platform administrative commands can only work with the simulator */
+	if (rc == 0) {
+	    if (!mssim) {
+		if (tssVerbose) printf("TSS_Socket_TransmitCommand: server type %s unsupported\n",
+				       tssContext->tssServerType);
+		rc = TSS_RC_INSUPPORTED_INTERFACE;	
+	    }
+	}
+	if (rc == 0) {
+	    rc = TSS_Socket_Open(tssContext, tssContext->tssCommandPort);
+	}
+	if (rc == 0) {
+	    tssContext->tssFirstTransmit = FALSE;
+	}
+    }
+    if (message != NULL) {
+	if (tssVverbose) printf("TSS_Socket_TransmitCommand: %s\n", message);
+    }
+    if (rc == 0) {
+	uint32_t commandType = htonl(command);	/* command type is network byte order */
+	rc = TSS_Socket_SendBytes(tssContext->sock_fd, (uint8_t *)&commandType, sizeof(uint32_t));
+    }
+    /* FIXME The only command currently supported is TPM_STOP, which has no response */
+    return rc;
+}
+
 /* TSS_Socket_Transmit() transmits the TPM command and receives the response.
 
    It can return socket transmit and receive packet errors, but normally returns the TPM response
@@ -168,7 +213,7 @@ TPM_RC TSS_Socket_Transmit(TSS_CONTEXT *tssContext,
     /* receive the response over the socket.  Returns socket errors, malformed response errors.
        Else returns the TPM response code. */
     if (rc == 0) {
-	rc = TSS_Socket_ReceiveCommand(tssContext, responseBuffer, read);
+	rc = TSS_Socket_ReceiveResponse(tssContext, responseBuffer, read);
     }
     /* rawsingle flags a close after each command */
     if (rawsingle) {
@@ -234,7 +279,7 @@ static uint32_t TSS_Socket_Open(TSS_CONTEXT *tssContext, short port)
     struct hostent 	*host = NULL;
 
     if (tssVverbose) printf("TSS_Socket_Open: Opening %s:%hu-%s\n",
-			    tssContext->tssServerName, port, tssContext->tssServerType);
+			    tssContext->tssServerName, (unsigned short)port, tssContext->tssServerType);
     /* create a socket */
 #ifdef TPM_WINDOWS
     if ((irc = WSAStartup(0x202, &wsaData)) != 0) {		/* if not successful */
@@ -274,8 +319,8 @@ static uint32_t TSS_Socket_Open(TSS_CONTEXT *tssContext, short port)
     /* establish the connection to the TPM server */
 #ifdef TPM_POSIX
     if (connect(tssContext->sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-	if (tssVerbose) printf("TSS_Socket_Open: Error on connect to %s:%u\n",
-			       tssContext->tssServerName, port);
+	if (tssVerbose) printf("TSS_Socket_Open: Error on connect to %s:%hu\n",
+			       tssContext->tssServerName, (unsigned short)port);
 	if (tssVerbose) printf("TSS_Socket_Open: client connect: error %d %s\n",
 			       errno,strerror(errno));
 	return TSS_RC_NO_CONNECTION;
@@ -283,10 +328,14 @@ static uint32_t TSS_Socket_Open(TSS_CONTEXT *tssContext, short port)
 #endif
 #ifdef TPM_WINDOWS
     if (connect(tssContext->sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) != 0) {
-	if (tssVerbose) printf("TSS_Socket_Open: Error on connect to %s:%u\n",
-			       tssContext->tssServerName, port);
-	if (tssVerbose) printf("TSS_Socket_Open: client connect: error %d %s\n",
-			       errno,strerror(errno));
+	if (tssVerbose) {
+	    int err;
+	    printf("TSS_Socket_Open: Error on connect to %s:%hu\n",
+		   tssContext->tssServerName, (unsigned short)port);
+	    err = WSAGetLastError();
+	    printf("TSS_Socket_Open: client connect: error %d\n", err);
+	    TSS_Socket_PrintError(err);
+	}
 	return TSS_RC_NO_CONNECTION;
     }
 #endif
@@ -407,7 +456,7 @@ static uint32_t TSS_Socket_SendBytes(TSS_SOCKET_FD sock_fd, const uint8_t *buffe
     return 0;
 }
 
-/* TSS_Socket_ReceiveCommand() reads a TPM response packet from the socket.  'buffer' must be at
+/* TSS_Socket_ReceiveResponse() reads a TPM response packet from the socket.  'buffer' must be at
    least MAX_RESPONSE_SIZE bytes.  The bytes read are returned in 'length'.
 
    The MS simulator packet is of the form:
@@ -421,7 +470,7 @@ static uint32_t TSS_Socket_SendBytes(TSS_SOCKET_FD sock_fd, const uint8_t *buffe
    Validates that the packet length and the packet responseSize match 
 */
 
-static uint32_t TSS_Socket_ReceiveCommand(TSS_CONTEXT *tssContext,
+static uint32_t TSS_Socket_ReceiveResponse(TSS_CONTEXT *tssContext,
 					  uint8_t *buffer, uint32_t *length)
 {
     uint32_t 	rc = 0;
@@ -433,6 +482,7 @@ static uint32_t TSS_Socket_ReceiveCommand(TSS_CONTEXT *tssContext,
     int 	mssim;		/* boolean, true for MS simulator packet format, false for raw
 				   packet format */
     int		rawsingle;
+    TPM_RC 	acknowledgement;	/* MS sim acknowledgement */
     
     /* get the server packet type, MS sim or raw */
     if (rc == 0) {
@@ -461,14 +511,14 @@ static uint32_t TSS_Socket_ReceiveCommand(TSS_CONTEXT *tssContext,
 	/* check the response size, see TSS_CONTEXT structure */
 	if (responseSize > MAX_RESPONSE_SIZE) {
 	    if (tssVerbose)
-		printf("TSS_Socket_ReceiveCommand: ERROR: responseSize %u greater than %u\n",
+		printf("TSS_Socket_ReceiveResponse: ERROR: responseSize %u greater than %u\n",
 		       responseSize, MAX_RESPONSE_SIZE);
 	    rc = TSS_RC_BAD_CONNECTION;
 	}
 	/* check that MS sim prepended length is the same as the response TPM packet
 	   length parameter */
 	if (mssim && (responseSize != responseLength)) {
-	    if (tssVerbose) printf("TSS_Socket_ReceiveCommand: "
+	    if (tssVerbose) printf("TSS_Socket_ReceiveResponse: "
 				   "ERROR: responseSize %u not equal to responseLength %u\n",
 				   responseSize, responseLength);
 	    rc = TSS_RC_BAD_CONNECTION;
@@ -481,11 +531,10 @@ static uint32_t TSS_Socket_ReceiveCommand(TSS_CONTEXT *tssContext,
 				     responseSize - (sizeof(TPM_ST) + sizeof(uint32_t)));
     }
     if ((rc == 0) && tssVverbose) {
-	TSS_PrintAll("TSS_Socket_ReceiveCommand",
+	TSS_PrintAll("TSS_Socket_ReceiveResponse",
 		     buffer, responseSize);
     }
     /* read the MS sim acknowledgement */
-    TPM_RC 	acknowledgement;
     if ((rc == 0) && mssim) {
 	rc = TSS_Socket_ReceiveBytes(tssContext->sock_fd,
 				     (uint8_t *)&acknowledgement, sizeof(uint32_t));
@@ -626,3 +675,32 @@ TPM_RC TSS_Socket_Close(TSS_CONTEXT *tssContext)
     return rc;
 }
 #endif 	/* TPM_NOSOCKET */
+
+#ifdef TPM_WINDOWS
+
+/* The Windows equivalent to strerror().  It also traces the error message.
+ */
+
+static void TSS_Socket_PrintError(int err)
+{
+    DWORD rc;
+    char *buffer = NULL;
+    /* mingw seems to output UTF-8 for FormatMessage().  For Visual Studio, FormatMessage() outputs
+       UTF-16, which would require wprintf(). FormatMessageA() outputs UTF-8, permitting printf()
+       for both compilers. */
+    rc = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL,	/* formatting */
+			err,
+			0,	/* language */
+			(LPSTR)&buffer, 
+			0, 
+			NULL);
+    if (rc != 0) {
+	printf("%s\n", buffer);
+    }
+    LocalFree(buffer);
+    return;
+}
+#endif
+
+

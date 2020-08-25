@@ -3,7 +3,6 @@
 /*			  Command and Response Parameter Structures		*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: Parameters.h 1257 2018-06-27 20:52:08Z kgoldman $		*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,13 +54,11 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2012-2015				*/
+/*  (c) Copyright IBM Corp. and others, 2012-2019				*/
 /*										*/
 /********************************************************************************/
 
 /* TPM and TSS share thses structures */
-
-/* rev 119 */
 
 #ifndef PARAMETERS_H
 #define PARAMETERS_H
@@ -71,6 +68,7 @@
 #include "ActivateCredential_fp.h"
 #include "CertifyCreation_fp.h"
 #include "Certify_fp.h"
+#include "CertifyX509_fp.h"
 #include "ChangeEPS_fp.h"
 #include "ChangePPS_fp.h"
 #include "ClearControl_fp.h"
@@ -179,6 +177,8 @@
 #include "ZGen_2Phase_fp.h"
 #include "NTC_fp.h"
 
+#include <ibmtss/Parameters12.h>
+
 typedef union {
     ActivateCredential_In         ActivateCredential;
     CertifyCreation_In            CertifyCreation;
@@ -283,6 +283,30 @@ typedef union {
     Unseal_In                     Unseal;
     VerifySignature_In            VerifySignature;
     ZGen_2Phase_In                ZGen_2Phase;
+
+    ActivateIdentity_In		ActivateIdentity;
+    CreateWrapKey_In		CreateWrapKey;
+    CreateEndorsementKeyPair_In	CreateEndorsementKeyPair;
+    Extend_In			Extend;
+    FlushSpecific_In		FlushSpecific;
+    GetCapability12_In		GetCapability12;
+    MakeIdentity_In		MakeIdentity;
+    NV_DefineSpace12_In		NV_DefineSpace12;
+    NV_ReadValue_In		NV_ReadValue;
+    NV_ReadValueAuth_In		NV_ReadValueAuth;
+    NV_WriteValue_In		NV_WriteValue;
+    NV_WriteValueAuth_In	NV_WriteValueAuth;
+    OSAP_In			OSAP;
+    OwnerReadInternalPub_In	OwnerReadInternalPub;
+    OwnerSetDisable_In		OwnerSetDisable;
+    LoadKey2_In			LoadKey2;
+    PcrRead12_In		PcrRead12;
+    PCR_Reset12_In		PCR_Reset12;
+    Quote2_In			Quote2;
+    ReadPubek_In		ReadPubek;
+    Sign12_In			Sign12;
+    Startup12_In		Startup12;
+    TakeOwnership_In		TakeOwnership;
 } COMMAND_PARAMETERS;
 
 typedef union
@@ -339,6 +363,24 @@ typedef union
     Unseal_Out                     Unseal;
     VerifySignature_Out            VerifySignature;
     ZGen_2Phase_Out                ZGen_2Phase;
+
+    ActivateIdentity_Out		ActivateIdentity;
+    CreateWrapKey_Out			CreateWrapKey;
+    CreateEndorsementKeyPair_Out	CreateEndorsementKeyPair;
+    Extend_Out				Extend;
+    GetCapability12_Out			GetCapability12;
+    MakeIdentity_Out			MakeIdentity;
+    NV_ReadValue_Out			NV_ReadValue;
+    NV_ReadValueAuth_Out		NV_ReadValueAuth;
+    OIAP_Out				OIAP;
+    OSAP_Out				OSAP;
+    OwnerReadInternalPub_Out		OwnerReadInternalPub;
+    LoadKey2_Out			LoadKey2;
+    PcrRead12_Out			PcrRead12;
+    Quote2_Out				Quote2;
+    ReadPubek_Out			ReadPubek;
+    Sign12_Out				Sign12;
+    TakeOwnership_Out			TakeOwnership;
 } RESPONSE_PARAMETERS;
 
 #endif

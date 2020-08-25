@@ -3,7 +3,6 @@
 /*		    TSS Implementation Specific Constants			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: Implementation.h 1299 2018-08-14 13:23:19Z kgoldman $	*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,7 +54,7 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2012-2018				*/
+/*  (c) Copyright IBM Corp. and others, 2012 - 2020				*/
 /*										*/
 /********************************************************************************/
 
@@ -177,27 +176,41 @@
 
 // From Vendor-Specific: Table 2 - Defines for Implemented Algorithms
 
+#ifndef ALG_RSA
 #define  ALG_RSA               ALG_YES
+#endif
+#ifndef ALG_SHA1
 #define  ALG_SHA1              ALG_YES
+#endif
 #define  ALG_HMAC              ALG_YES
+#ifndef ALG_TDES
 #define  ALG_TDES              ALG_YES
+#endif
 #define  ALG_AES               ALG_YES
 #define  ALG_MGF1              ALG_YES
 #define  ALG_XOR               ALG_YES
 #define  ALG_KEYEDHASH         ALG_YES
+#ifndef ALG_SHA256
 #define  ALG_SHA256            ALG_YES
+#endif
+#ifndef ALG_SHA384
 #define  ALG_SHA384            ALG_YES
+#endif
+#ifndef ALG_SHA512
 #define  ALG_SHA512            ALG_YES
+#endif
 #define  ALG_SHA3_256          ALG_NO
 #define  ALG_SHA3_384          ALG_NO
 #define  ALG_SHA3_512          ALG_NO
-#define  ALG_SM3_256           ALG_NO
+#define  ALG_SM3_256           ALG_YES
 #define  ALG_SM4               ALG_NO
 #define  ALG_RSASSA            (ALG_YES*ALG_RSA)
 #define  ALG_RSAES             (ALG_YES*ALG_RSA)
 #define  ALG_RSAPSS            (ALG_YES*ALG_RSA)
 #define  ALG_OAEP              (ALG_YES*ALG_RSA)
+#ifndef ALG_ECC
 #define  ALG_ECC               ALG_YES
+#endif
 #define  ALG_ECDH              (ALG_YES*ALG_ECC)
 #define  ALG_ECDSA             (ALG_YES*ALG_ECC)
 #define  ALG_ECDAA             (ALG_YES*ALG_ECC)
@@ -219,6 +232,7 @@
 #define  CC_ActivateCredential            CC_YES
 #define  CC_Certify                       CC_YES
 #define  CC_CertifyCreation               CC_YES
+#define  CC_CertifyX509		          CC_YES
 #define  CC_ChangeEPS                     CC_YES
 #define  CC_ChangePPS                     CC_YES
 #define  CC_Clear                         CC_YES
@@ -473,6 +487,10 @@
 #if defined ALG_SHA3_512 && ALG_SHA3_512 == YES
 #define TPM_ALGSHA3_512              (TPM_ALG_ID)(ALG_SHA3_512_VALUE)
 #endif
+#define  ALG_CMAC_VALUE               0x003f
+#if defined ALG_CMAC && ALG_CMAC == YES
+#define  TPM_ALG_CMAC                 (TPM_ALG_ID)(ALG_CMAC_VALUE)
+#endif
 #define  ALG_CTR_VALUE               0x0040
 #if defined ALG_CTR && ALG_CTR == YES
 #define  TPM_ALG_CTR                 (TPM_ALG_ID)(ALG_CTR_VALUE)
@@ -505,6 +523,11 @@
 #define  TPM_ECC_BN_P256      (TPM_ECC_CURVE)(0x0010)
 #define  TPM_ECC_BN_P638      (TPM_ECC_CURVE)(0x0011)
 #define  TPM_ECC_SM2_P256     (TPM_ECC_CURVE)(0x0020)
+#define  TPM_ECC_BP_P256_R1   (TPM_ECC_CURVE)(0x0030)
+#define  TPM_ECC_BP_P384_R1   (TPM_ECC_CURVE)(0x0031)
+#define  TPM_ECC_BP_P512_R1   (TPM_ECC_CURVE)(0x0032)
+#define  TPM_ECC_CURVE_25519  (TPM_ECC_CURVE)(0x0040)
+
 
 // From TCG Algorithm Registry: Table 12 - Defines for SHA1 Hash Values
 #define  SHA1_DIGEST_SIZE    20
@@ -1233,13 +1256,18 @@ typedef  UINT32             TPM_CC;
 #if CC_EncryptDecrypt2 == YES
 #define  TPM_CC_EncryptDecrypt2               (TPM_CC)(0x00000193)
 #endif
-
-#define  TPM_CC_AC_GetCapability		(TPM_CC)(0x00000194)
-#define  TPM_CC_AC_Send				(TPM_CC)(0x00000195)
-#define  TPM_CC_Policy_AC_SendSelect		(TPM_CC)(0x00000196)
+#define  TPM_CC_AC_GetCapability	      (TPM_CC)(0x00000194)
+#define  TPM_CC_AC_Send			      (TPM_CC)(0x00000195)
+#define  TPM_CC_Policy_AC_SendSelect	      (TPM_CC)(0x00000196)
+#ifndef CC_CertifyX509
+#   define CC_CertifyX509 NO
+#endif
+#if CC_CertifyX509 == YES
+#define  TPM_CC_CertifyX509 		      (TPM_CC)(0x00000197)
+#endif
 
 /* Compile variable. May increase based on implementation. */
-#define  TPM_CC_LAST				(TPM_CC)(0x00000196)
+#define  TPM_CC_LAST			      (TPM_CC)(0x00000197)
 
 #ifndef CC_Vendor_TCG_Test
 #   define CC_Vendor_TCG_Test NO
@@ -1394,8 +1422,8 @@ typedef  UINT32             TPM_CC;
 					  + (ADD_FILL || CC_PolicyAuthorizeNV)          /* 0x00000192 */ \
 					  + (ADD_FILL || CC_EncryptDecrypt2)            /* 0x00000193 */ \
 					  + (ADD_FILL || CC_PolicyNvWritten)            /* 0x0000018f */ \
+					  + (ADD_FILL || CC_CertifyX509)                /* 0x00000197 */ \
 					  )
-
 #define VENDOR_COMMAND_ARRAY_SIZE   ( 0				\
 				      + CC_Vendor_TCG_Test	\
 				      + CC_NTC2_PreConfig	\

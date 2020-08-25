@@ -3,9 +3,8 @@
 /*		TPM 2.0 Attestation - Client EK and EK certificate  		*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: createekcert.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2016 - 2018.					*/
+/* (c) Copyright IBM Corporation 2016 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -38,15 +37,15 @@
 /********************************************************************************/
 
 /* This program provisions an EK certificate.  It is required only for a SW TPM, which does not, of
-   course, come with a certificate.
+   course, come with a certificate.  The NV resident EK template and EK nonce are not used.
 
    NOTE This is a one time operation unless the EPS is changed, typically through the TSS regression
-   test.  I suggest saving the NVChip file.
+   test.
 
    Steps implemented:
 
-   Create a primary key using the default IWG template
-   
+   Create a primary key using the an IWG template
+ 
    Create a certificate using the CA key cakey.pem
 
    Create NV Index if not already provisioned.
@@ -59,7 +58,12 @@
 #include <string.h>
 #include <stdint.h>
 
-#include "openssl/pem.h"
+/* Windows 10 crypto API clashes with openssl */
+#ifdef TPM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
@@ -72,17 +76,22 @@
 static void printUsage(void);
 
 static TPM_RC defineEKCertIndex(TSS_CONTEXT *tssContext,
-				uint32_t certLength,	
+				uint32_t certLength,
 				TPMI_RH_NV_INDEX nvIndex,
 				const char *platformPassword);
 static TPM_RC storeEkCertificate(TSS_CONTEXT *tssContext,
 				 uint32_t certLength,
-				 unsigned char *certificate,	
+				 unsigned char *certificate,
 				 TPMI_RH_NV_INDEX nvIndex,
 				 const char *platformPassword);
 
+/* EK on low or high range, EK spec 2.3 */
+
+#define LowRange	1
+#define HighRange	2
+
 int vverbose = 0;
-int verbose = 0;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -90,12 +99,23 @@ int main(int argc, char *argv[])
     int			i;    /* argc iterator */
     TSS_CONTEXT 	*tssContext = NULL;
     int			noFlush = FALSE;
+    unsigned int	algCount = 0;
+    int			range = LowRange;	/* default low range */
+    TPMI_ALG_PUBLIC 	algPublic = 0;
+    TPMI_RSA_KEY_BITS 	keyBits = 0;
     const char		*certificateFilename = NULL;
     TPMI_RH_NV_INDEX	ekCertIndex = EK_CERT_RSA_INDEX;
     /* the CA for endorsement key certificates */
     const char 		*caKeyFileName = NULL;
     const char 		*caKeyPassword = "";
-    const char		*platformPassword = NULL; 
+    const char		*platformPassword = NULL;
+    const char		*endorsementPassword = NULL;
+    const char		*keyPassword = NULL; 
+    TPMT_PUBLIC 	tpmtPublicOut;		/* primary key public part */
+    char 		*x509CertString = NULL;
+    char 		*pemCertString = NULL;
+    uint32_t 		certLength;
+    unsigned char 	*certificate = NULL;
 
     /* FIXME may be better from command line or config file */
     char *subjectEntries[] = {
@@ -104,7 +124,7 @@ int main(int argc, char *argv[])
 	"Yorktown",	/* 2 locality*/
 	"IBM",		/* 3 organization */
 	NULL,		/* 4 organization unit */
-	"IBM SW TPM",	/* 5 common name */
+	"IBM's SW TPM",	/* 5 common name */
 	NULL		/* 6 email */
     };
     /* FIXME should come from root certificate, cacert.pem, cacertec.pem */
@@ -115,7 +135,7 @@ int main(int argc, char *argv[])
 	"IBM"			,
 	NULL			,
 	"EK CA"			,
-	NULL	
+	NULL
     };
     char *rootIssuerEntriesEc[] = {
 	"US"			,
@@ -124,13 +144,16 @@ int main(int argc, char *argv[])
 	"IBM"			,
 	NULL			,
 	"EK EC CA"		,
-	NULL	
+	NULL
     };
     /* default RSA */
     char 		**issuerEntries = rootIssuerEntriesRsa;
     size_t		issuerEntriesSize = sizeof(rootIssuerEntriesRsa)/sizeof(char *);
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
+    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
+    tssUtilsVerbose = FALSE;
+
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-noflush") == 0) {
@@ -146,22 +169,70 @@ int main(int argc, char *argv[])
 		printUsage();
 	    }
 	}
-	else if (strcmp(argv[i],"-alg") == 0) {
+	else if (strcmp(argv[i],"-high") == 0) {
+	    range = HighRange;
+	    if (algPublic != 0) {
+		printf("-high must be specified before -rsa or -ecc\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i], "-rsa") == 0) {
+	    algPublic = TPM_ALG_RSA;
+	    algCount++;
 	    i++;
 	    if (i < argc) {
-		if (strcmp(argv[i],"rsa") == 0) {
-		    ekCertIndex = EK_CERT_RSA_INDEX;
-		}
-		else if (strcmp(argv[i],"ecc") == 0) {
-		    ekCertIndex = EK_CERT_EC_INDEX;
-		}
-		else {
-		    printf("Bad parameter %s for -alg\n", argv[i]);
+		sscanf(argv[i],"%hu", &keyBits);
+		switch (keyBits) {
+		  case 2048:
+		    if (range == LowRange) {
+			ekCertIndex = EK_CERT_RSA_INDEX;
+		    }
+		    else {	/* high range */
+			ekCertIndex = EK_CERT_RSA_2048_INDEX_H1;
+		    }
+		    break;
+		  case 3072:
+		    ekCertIndex = EK_CERT_RSA_3072_INDEX_H6;
+		    break;
+		  case 4096:
+		    ekCertIndex = EK_CERT_RSA_4096_INDEX_H7;
+		    break;
+		  default:
+		    printf("Bad key size %s for -rsa\n", argv[i]);
 		    printUsage();
 		}
 	    }
 	    else {
-		printf("-alg option needs a value\n");
+		printf("Missing keysize parameter for -rsa\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i], "-ecc") == 0) {
+	    algPublic = TPM_ALG_ECC;
+	    algCount++;
+	    i++;
+	    if (i < argc) {
+		if (strcmp(argv[i],"nistp256") == 0) {
+		    if (range == LowRange) {
+			ekCertIndex = EK_CERT_EC_INDEX;
+		    }
+		    else {	/* high range */
+			ekCertIndex = EK_CERT_ECC_NISTP256_INDEX_H2;
+		    }
+		}
+		else if (strcmp(argv[i],"nistp384") == 0) {
+		    ekCertIndex = EK_CERT_ECC_NISTP384_INDEX_H3;
+		}
+		else if (strcmp(argv[i],"nistp521") == 0) {
+		    ekCertIndex = EK_CERT_ECC_NISTP521_INDEX_H4;
+		}
+		else {
+		    printf("Bad curve parameter %s for -ecc\n", argv[i]);
+		    printUsage();
+		}
+	    }
+	    else {
+		printf("-ecc option needs a value\n");
 		printUsage();
 	    }
 	}
@@ -182,7 +253,7 @@ int main(int argc, char *argv[])
 		}
 	    }
 	    else {
-		printf("-alg option needs a value\n");
+		printf("-caalg option needs a value\n");
 		printUsage();
 	    }
 	}
@@ -216,15 +287,35 @@ int main(int argc, char *argv[])
 		printUsage();
 	    }
 	}
+	else if (strcmp(argv[i],"-pwde") == 0) {
+	    i++;
+	    if (i < argc) {
+		endorsementPassword = argv[i];
+	    }
+	    else {
+		printf("-pwde option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i],"-pwdk") == 0) {
+	    i++;
+	    if (i < argc) {
+		keyPassword = argv[i];
+	    }
+	    else {
+		printf("-pwdk option needs a value\n");
+		printUsage();
+	    }
+	}
 	else if (strcmp(argv[i],"-h") == 0) {
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = 1;
+	    tssUtilsVerbose = 1;
 	}
 	else if (strcmp(argv[i],"-vv") == 0) {
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");	/* trace entire TSS */
-	    verbose = 1;
+	    tssUtilsVerbose = 1;
 	    vverbose = 1;
 	}
 	else {
@@ -232,36 +323,37 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
     }
+    if (algCount == 0) {
+	printf("One of -rsa, -ecc must be specified\n");
+	printUsage();
+    }
+    if (algCount > 1) {
+	printf("Only one of -rsa, -ecc can be specified\n");
+	printUsage();
+    }
     if (caKeyFileName == NULL) {
 	printf("ERROR: Missing -cakey\n");
 	printUsage();
-    }
-    /* Precalculate the openssl nids, into global table */
-    if (rc == 0) {
-	rc = calculateNid();
     }
     /* Start a TSS context */
     if (rc == 0) {
 	rc = TSS_Create(&tssContext);
     }
     /* create a primary EK using the default IWG template */
-    TPMT_PUBLIC 	tpmtPublicOut;		/* primary key public part */
     if (rc == 0) {
 	TPM_HANDLE keyHandle;
-	rc = processCreatePrimary(tssContext,
-				  &keyHandle,
-				  ekCertIndex,		/* RSA or EC */
-				  NULL, 0,		/* EK nonce, can be NULL */
-				  NULL,			/* template */
-				  &tpmtPublicOut,	/* primary key */
-				  noFlush,
-				  verbose);		/* print errors */
+	rc = processCreatePrimaryE(tssContext,
+				   &keyHandle,
+				   endorsementPassword,
+				   keyPassword,		/* used in high range only */
+				   ekCertIndex,		/* RSA or EC */
+				   NULL, 0,		/* EK nonce, can be NULL */
+				   NULL,		/* template */
+				   &tpmtPublicOut,	/* primary key */
+				   noFlush,
+				   tssUtilsVerbose);	/* print errors */
     }
     /* create the EK certificate from the EK public key, using the above issuer and subject */
-    char *x509CertString = NULL;
-    char *pemCertString = NULL;
-    uint32_t certLength;
-    unsigned char *certificate = NULL;
     if (rc == 0) {
 	rc = createCertificate(&x509CertString,			/* freed @3 */
 			       &pemCertString,			/* freed @2 */
@@ -278,14 +370,14 @@ int main(int argc, char *argv[])
     /* If the NV index is not defined, define it */
     if (rc == 0) {
 	rc = defineEKCertIndex(tssContext,
-			       certLength,	
+			       certLength,
 			       ekCertIndex,
 			       platformPassword);
     }
     /* store the EK certificate in NV */
     if (rc == 0) {
 	rc = storeEkCertificate(tssContext,
-				certLength, certificate,	
+				certLength, certificate,
 				ekCertIndex,
 				platformPassword);
     }
@@ -318,7 +410,7 @@ static TPM_RC defineEKCertIndex(TSS_CONTEXT *tssContext,
     NV_DefineSpace_In 	nvDefineSpaceIn;
     
     /* read metadata to make sure the index is there, the size is sufficient, and get the Name */
-    if (verbose) printf("defineEKCertIndex: certificate length %u\n", certLength);
+    if (tssUtilsVerbose) printf("defineEKCertIndex: certificate length %u\n", certLength);
     if (rc == 0) {
 	nvReadPublicIn.nvIndex = nvIndex;
 	rc = TSS_Execute(tssContext,
@@ -330,7 +422,7 @@ static TPM_RC defineEKCertIndex(TSS_CONTEXT *tssContext,
     }
     /* if already defined, check the size */
     if (rc == 0) {
-	if (verbose) printf("defineEKCertIndex: defined data size %u\n",
+	if (tssUtilsVerbose) printf("defineEKCertIndex: defined data size %u\n",
 			    nvReadPublicOut.nvPublic.nvPublic.dataSize);
 	if (nvReadPublicOut.nvPublic.nvPublic.dataSize < certLength) {
 	    printf("defineEKCertIndex: data size %u insufficient for certificate %u\n",
@@ -405,7 +497,7 @@ static TPM_RC storeEkCertificate(TSS_CONTEXT *tssContext,
 			     &nvBufferMax);
     }    
     if (rc == 0) {
-	if (verbose) printf("storeEkCertificate: writing %u bytes to %08x\n",
+	if (tssUtilsVerbose) printf("storeEkCertificate: writing %u bytes to %08x\n",
 			    certLength, nvIndex);
 	nvWriteIn.authHandle = TPM_RH_PLATFORM;  
 	nvWriteIn.nvIndex = nvIndex;
@@ -442,7 +534,7 @@ static TPM_RC storeEkCertificate(TSS_CONTEXT *tssContext,
 	}
     }
     if (rc == 0) {
-	if (verbose) printf("storeEkCertificate: success\n");
+	if (tssUtilsVerbose) printf("storeEkCertificate: success\n");
     }
     else {
 	const char *msg;
@@ -464,17 +556,28 @@ static void printUsage(void)
     printf("\n");
     printf("createekcert\n");
     printf("\n");
-    printf("Provisions an EK certificate, using the default IWG template\n");
+    printf("Provisions an EK certificate using the default IWG template\n");
     printf("E.g.,\n");
     printf("\n");
-    printf("Usage: createekcert -alg rsa -cakey cakey.pem    -capwd rrrr -v\n");
-    printf("or:    createekcert -alg ecc -cakey cakeyecc.pem -capwd rrrr -caalg ec -v\n");
+    printf("Usage: createekcert -rsa 2048     -cakey cakey.pem    -capwd rrrr -v\n");
+    printf("or:    createekcert -ecc nistp256 -cakey cakeyecc.pem -capwd rrrr -caalg ec -v\n");
     printf("\n");
-    printf("\t[-pwdp\t\tplatform hierarchy password (default empty)]\n");
+    printf("\t[-pwdp\t\tplatform    hierarchy password (default empty)]\n");
+    printf("\t[-pwde\t\tendorsement hierarchy password (default empty)]\n");
+    printf("\t[-pwdk\t\tpassword for endorsement key (default empty)]\n");
     printf("\t-cakey\t\tCA PEM key file name\n");
     printf("\t[-capwd\t\tCA PEM key password (default empty)]\n");
-    printf("\t[-caalg\t\tCA key algorithm (rsa or ec) (default rsa)]\n");
-    printf("\t[-alg\t\t(rsa or ecc certificate) (default rsa)]\n");
+    printf("\t[-caalg\t\tCA key algorithm (rsa or ecc) (default rsa)]\n");
+    printf("\n");
+    printf("\t[-high\t\tUse the NV high range.  Specify before algorithm]\n");
+    printf("\t-rsa keybits\n");
+    printf("\t\t2048\n");
+    printf("\t\t3072\n");
+    printf("\t-ecc curve\n");
+    printf("\t\tnistp256\n");
+    printf("\t\tnistp384\n");
+    printf("\t\tnistp521\n");
+    printf("\n");
     printf("\t[-noflush\tdo not flush the primary key]\n");
     printf("\t[-of\t\tDER certificate output file name]\n");
     printf("\n");

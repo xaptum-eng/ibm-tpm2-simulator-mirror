@@ -3,9 +3,8 @@
 /*			     Structure Print Utilities				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tssprint.h 1257 2018-06-27 20:52:08Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -86,6 +85,8 @@ extern "C" {
     LIB_EXPORT
     void TSS_TPM_ECC_CURVE_Print(const char *string, TPM_ECC_CURVE source, unsigned int indent);
     LIB_EXPORT
+    void TSS_TPMS_TAGGED_POLICY_Print(TPMS_TAGGED_POLICY *source, unsigned int indent);
+    LIB_EXPORT
     void TSS_TPM_CC_Print(const char *string, TPM_CC source, unsigned int indent);
     LIB_EXPORT
     void TSS_TPM_TPMA_ALGORITHM_Print(TPMA_ALGORITHM source, unsigned int indent);
@@ -117,6 +118,8 @@ extern "C" {
     void TSS_TPMA_STARTUP_CLEAR_Print(TPMA_STARTUP_CLEAR source, unsigned int indent);
     LIB_EXPORT
     void TSS_TPMA_MEMORY_Print(TPMA_MEMORY source, unsigned int indent);
+    LIB_EXPORT
+    void TSS_TPMA_MODES_Print(TPMA_MODES source, unsigned int indent);
     LIB_EXPORT
     void TSS_TPMI_YES_NO_Print(const char *string, TPMI_YES_NO source, unsigned int indent);
     LIB_EXPORT
@@ -164,13 +167,17 @@ extern "C" {
     LIB_EXPORT
     void TSS_TPMS_NV_CERTIFY_INFO_Print(TPMS_NV_CERTIFY_INFO  *source, unsigned int indent);
     LIB_EXPORT
+    void TSS_TPMS_NV_DIGEST_CERTIFY_INFO_Print(TPMS_NV_DIGEST_CERTIFY_INFO  *source, unsigned int indent);
+    LIB_EXPORT
     void TSS_TPMI_ST_ATTEST_Print(const char *string, TPMI_ST_ATTEST selector, unsigned int indent);
     LIB_EXPORT
     void TSS_TPMU_ATTEST_Print(TPMU_ATTEST *source, TPMI_ST_ATTEST selector, unsigned int indent);
     LIB_EXPORT
     void TSS_TPMS_ATTEST_Print(TPMS_ATTEST *source, unsigned int indent);
+#if 0
     LIB_EXPORT
     void TSS_TPM2B_ATTEST_Print(TPM2B_ATTEST *source, unsigned int indent);
+#endif
     LIB_EXPORT
     void TSS_TPMS_AUTH_COMMAND_Print(TPMS_AUTH_COMMAND *source, unsigned int indent);
     LIB_EXPORT

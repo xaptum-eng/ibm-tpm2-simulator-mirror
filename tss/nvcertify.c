@@ -3,9 +3,8 @@
 /*			    NV_Certify						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: nvcertify.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -53,9 +52,8 @@
 #include <ibmtss/Unmarshal_fp.h>
 
 static void printUsage(void);
-static void printSignature(NV_Certify_Out *out);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -72,9 +70,11 @@ int main(int argc, char *argv[])
     TPMI_RH_NV_INDEX		nvIndex = 0;
     uint16_t 			size = 0;
     uint16_t 			offset = 0;			/* default 0 */
+    TPMS_ATTEST 		tpmsAttest;
     const char			*signatureFilename = NULL;
     const char			*attestInfoFilename = NULL;
-    int				useRsa = 1;
+    const char			*certifyDataFilename = NULL;
+    TPM_ALG_ID			sigAlg = TPM_ALG_RSA;
     TPMI_SH_AUTH_SESSION    	sessionHandle0 = TPM_RS_PW;
     unsigned int		sessionAttributes0 = 0;
     TPMI_SH_AUTH_SESSION    	sessionHandle1 = TPM_RS_PW;
@@ -84,7 +84,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-ha") == 0) {
@@ -156,10 +157,13 @@ int main(int argc, char *argv[])
 	    i++;
 	    if (i < argc) {
 		if (strcmp(argv[i],"rsa") == 0) {
-		    useRsa = 1;
+		    sigAlg = TPM_ALG_RSA;
 		}
 		else if (strcmp(argv[i],"ecc") == 0) {
-		    useRsa = 0;
+		    sigAlg = TPM_ALG_ECDSA;
+		}
+		else if (strcmp(argv[i],"hmac") == 0) {
+		    sigAlg = TPM_ALG_HMAC;
 		}
 		else {
 		    printf("Bad parameter %s for -salg\n", argv[i]);
@@ -208,6 +212,16 @@ int main(int argc, char *argv[])
 	    }
 	    else {
 		printf("-oa option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i],"-od") == 0) {
+	    i++;
+	    if (i < argc) {
+		certifyDataFilename = argv[i];
+	    }
+	    else {
+		printf("-od option needs a value\n");
 		printUsage();
 	    }
 	}
@@ -281,7 +295,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -314,15 +328,11 @@ int main(int argc, char *argv[])
 	printf("NV index handle not specified or out of range, MSB not 01\n");
 	printUsage();
     }
-    if (size == 0) {
-	printf("Size not specified\n");
-	printUsage();
-    }
     if (rc == 0) {
 	in.signHandle = signHandle;
 	in.nvIndex = nvIndex;
 	in.qualifyingData.t.size = 0;
-	if (useRsa) {
+	if (sigAlg == TPM_ALG_RSA) {
 	    /* Table 145 - Definition of TPMT_SIG_SCHEME Structure */
 	    in.inScheme.scheme = TPM_ALG_RSASSA;	
 	    /* Table 144 - Definition of TPMU_SIG_SCHEME Union <IN/OUT, S> */
@@ -330,9 +340,13 @@ int main(int argc, char *argv[])
 	    /* Table 135 - Definition of TPMS_SCHEME_HASH Structure */
 	    in.inScheme.details.rsassa.hashAlg = halg;
 	}
-	else {	/* ecc */
+	else if (sigAlg == TPM_ALG_ECDSA) {
 	    in.inScheme.scheme = TPM_ALG_ECDSA;	
 	    in.inScheme.details.ecdsa.hashAlg = halg;
+	}
+	else {	/* HMAC */
+	    in.inScheme.scheme = TPM_ALG_HMAC;	
+	    in.inScheme.details.hmac.hashAlg = halg;
 	}
 	in.size = size;
 	in.offset = offset;
@@ -361,7 +375,7 @@ int main(int argc, char *argv[])
     }
     if ((rc == 0) && (signatureFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.signature,
-				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshal,
+				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshalu,
 				     signatureFilename);
     }
     if ((rc == 0) && (attestInfoFilename != NULL)) {
@@ -369,16 +383,32 @@ int main(int argc, char *argv[])
 				      out.certifyInfo.t.size,
 				      attestInfoFilename);
     }
+    /* unmarshal the TPM2B_ATTEST output to a TPMS_ATTEST structure */
     if (rc == 0) {
-	TPMS_ATTEST 		tpmsAttest;
 	uint8_t *tmpBuffer = out.certifyInfo.t.attestationData;
 	uint32_t tmpSize = out.certifyInfo.t.size;
 	rc = TSS_TPMS_ATTEST_Unmarshalu(&tpmsAttest, &tmpBuffer, &tmpSize);
-	if (verbose) TSS_TPMS_ATTEST_Print(&tpmsAttest, 0);
     }
     if (rc == 0) {
-	if (verbose) printSignature(&out);
-	if (verbose) printf("nvcertify: success\n");
+	if (tssUtilsVerbose) TSS_TPMS_ATTEST_Print(&tpmsAttest, 0);
+    }
+    if ((rc == 0) && (certifyDataFilename != NULL)) {
+	/* TPMS_NV_DIGEST_CERTIFY_INFO */
+	if ((offset == 0) && (size == 0)) {
+	    rc = TSS_File_WriteBinaryFile(tpmsAttest.attested.nvDigest.nvDigest.t.buffer,
+					  tpmsAttest.attested.nvDigest.nvDigest.t.size,
+					  certifyDataFilename);
+	}
+	/* TPMS_NV_CERTIFY_INFO */
+	else {
+	    rc = TSS_File_WriteBinaryFile(tpmsAttest.attested.nv.nvContents.t.buffer,
+					  tpmsAttest.attested.nv.nvContents.t.size,
+					  certifyDataFilename);
+	}
+    }
+    if (rc == 0) {
+	if (tssUtilsVerbose) TSS_TPMT_SIGNATURE_Print(&out.signature, 0);
+	if (tssUtilsVerbose) printf("nvcertify: success\n");
     }
     else {
 	const char *msg;
@@ -390,13 +420,6 @@ int main(int argc, char *argv[])
 	rc = EXIT_FAILURE;
     }
     return rc;
-}
-
-static void printSignature(NV_Certify_Out *out)
-{
-    TSS_PrintAll("Signature",
-		 out->signature.signature.rsassa.sig.t.buffer,
-		 out->signature.signature.rsassa.sig.t.size);
 }
 
 static void printUsage(void)
@@ -411,11 +434,12 @@ static void printUsage(void)
     printf("\t-hk\tcertifying key handle\n");
     printf("\t[-pwdk\tpassword for key (default empty)]\n");
     printf("\t[-halg\t(sha1, sha256, sha384, sha512) (default sha256)]\n");
-    printf("\t[-salg\tsignature algorithm (rsa, ecc) (default rsa)]\n");
+    printf("\t[-salg\tsignature algorithm (rsa, ecc, hmac) (default rsa)]\n");
     printf("\t-sz\tdata size\n");
     printf("\t[-off\toffset (default 0)]\n");
     printf("\t[-os\tsignature file name  (default do not save)]\n");
     printf("\t[-oa\tattestation output file name (default do not save)]\n");
+    printf("\t[-od\tcertified data file name (default do not save)]\n");
     printf("\n");
     printf("\t-se[0-2] session handle / attributes (default PWAP)\n");
     printf("\t01\tcontinue\n");

@@ -3,9 +3,8 @@
 /*			     TPM 1.2 TSS Authorization				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: tssauth12.c 1287 2018-07-30 13:34:27Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2018.						*/
+/* (c) Copyright IBM Corporation 2018 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -77,8 +76,10 @@ typedef struct MARSHAL_TABLE {
     const char 			*commandText;
     MarshalInFunction_t 	marshalInFunction;	/* marshal input command */
     UnmarshalOutFunction_t 	unmarshalOutFunction;	/* unmarshal output response */
+#ifndef TPM_TSS_NOCMDCHECK
     UnmarshalInFunction_t	unmarshalInFunction;	/* unmarshal input command for parameter
 							   checking */
+#endif
 } MARSHAL_TABLE;
 
 static const MARSHAL_TABLE marshalTable12 [] = {
@@ -87,6 +88,11 @@ static const MARSHAL_TABLE marshalTable12 [] = {
      (MarshalInFunction_t)TSS_ActivateIdentity_In_Marshalu,
      (UnmarshalOutFunction_t)TSS_ActivateIdentity_Out_Unmarshalu,
      (UnmarshalInFunction_t)ActivateIdentity_In_Unmarshal},
+
+    {TPM_ORD_ContinueSelfTest,"TPM_ORD_ContinueSelfTest",
+     (MarshalInFunction_t)NULL,
+     (UnmarshalOutFunction_t)NULL,
+     (UnmarshalInFunction_t)NULL},
 
     {TPM_ORD_CreateEndorsementKeyPair,"TPM_ORD_CreateEndorsementKeyPair",
      (MarshalInFunction_t)TSS_CreateEndorsementKeyPair_In_Marshalu,
@@ -237,7 +243,9 @@ static TPM_RC TSS_MarshalTable12_Process(TSS_AUTH_CONTEXT *tssAuthContext,
 	tssAuthContext->commandText = marshalTable12[index].commandText;
 	tssAuthContext->marshalInFunction = marshalTable12[index].marshalInFunction;
 	tssAuthContext->unmarshalOutFunction = marshalTable12[index].unmarshalOutFunction;
+#ifndef TPM_TSS_NOCMDCHECK
 	tssAuthContext->unmarshalInFunction = marshalTable12[index].unmarshalInFunction;
+#endif
     }
     else {
 	if (tssVerbose) printf("TSS_MarshalTable12_Process: "
@@ -328,6 +336,7 @@ TPM_RC TSS_Marshal12(TSS_AUTH_CONTEXT *tssAuthContext,
 	    /* no marshal function and no command parameter structure is OK */
 	}
     }
+#ifndef TPM_TSS_NOCMDCHECK
     /* unmarshal to validate the input parameters */
     if ((rc == 0) && (tssAuthContext->unmarshalInFunction != NULL)) {
 	COMMAND_PARAMETERS target;
@@ -338,9 +347,10 @@ TPM_RC TSS_Marshal12(TSS_AUTH_CONTEXT *tssAuthContext,
 	    printf("TSS_Marshal12: Invalid command parameter\n");
 	}
     }
+#endif
     /* back fill the correct commandSize */
     if (rc == 0) {
-	uint16_t written;		/* dummy */
+	uint16_t written = 0;		/* dummy */
 	uint32_t commandSize = tssAuthContext->commandSize;
 	buffer = tssAuthContext->commandBuffer + sizeof(TPMI_ST_COMMAND_TAG);
 	TSS_UINT32_Marshalu(&commandSize, &written, &buffer, NULL);
@@ -491,7 +501,7 @@ TPM_RC TSS_SetCmdAuths12(TSS_AUTH_CONTEXT 	*tssAuthContext,
 	}
     }	
     if (rc == 0) {
-	uint16_t written;		/* dummy */
+	uint16_t written = 0;		/* dummy */
 	uint32_t commandSize;
 	/* record command stream used size */
 	tssAuthContext->commandSize = cpBuffer - tssAuthContext->commandBuffer;

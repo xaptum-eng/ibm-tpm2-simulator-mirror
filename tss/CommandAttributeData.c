@@ -3,7 +3,6 @@
 /*			  Command Attributes Table   				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: CommandAttributeData.c 1257 2018-06-27 20:52:08Z kgoldman $	*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,11 +54,9 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2012-2018				*/
+/*  (c) Copyright IBM Corp. and others, 2012 - 2019				*/
 /*										*/
 /********************************************************************************/
-
-/* rev 119 */
 
 // 9.3	CommandAttributeData.c
 
@@ -225,6 +222,9 @@ const TPMA_CC_TSS    s_ccAttr [] = {
 #endif
 #if (PAD_LIST || CC_CertifyCreation)
     {{0x014a, 0, 0, 0, 0, 2, 0, 0, 0}},     // TPM_CC_CertifyCreation
+#endif
+#if (PAD_LIST || CC_CertifyX509)
+    {{0x0197, 0, 0, 0, 0, 2, 0, 0, 0}},     // TPM_CC_CertifyX509
 #endif
 #if (PAD_LIST || CC_Duplicate)
     {{0x014b, 0, 0, 0, 0, 2, 0, 0, 0}},     // TPM_CC_Duplicate
@@ -643,6 +643,10 @@ const COMMAND_ATTRIBUTES    s_commandAttributes [] = {
     (COMMAND_ATTRIBUTES)(CC_CertifyCreation            *  // 0x014a
 			 (IS_IMPLEMENTED+DECRYPT_2+HANDLE_1_USER+ENCRYPT_2)),
 #endif
+#if (PAD_LIST || CC_CertifyX509)
+    (COMMAND_ATTRIBUTES)(CC_CertifyX509                *  // 0x0197
+			 (IS_IMPLEMENTED+DECRYPT_2+HANDLE_1_ADMIN+HANDLE_2_USER+ENCRYPT_2)),
+#endif
 #if (PAD_LIST || CC_Duplicate)
     (COMMAND_ATTRIBUTES)(CC_Duplicate                  *  // 0x014b
 			 (IS_IMPLEMENTED+DECRYPT_2+HANDLE_1_DUP+ENCRYPT_2)),
@@ -937,7 +941,7 @@ const COMMAND_ATTRIBUTES    s_commandAttributes [] = {
 			 (IS_IMPLEMENTED+DECRYPT_2+ENCRYPT_2)),
 #endif
 
-#ifdef TPM_NUVOTON
+#ifdef TPM_TSS_NUVOTON
 #if (PAD_LIST || CC_NTC2_PreConfig)
     (COMMAND_ATTRIBUTES)(CC_NTC2_PreConfig             *  // 0x20000211
 			 (IS_IMPLEMENTED+NO_SESSIONS)),
@@ -950,7 +954,7 @@ const COMMAND_ATTRIBUTES    s_commandAttributes [] = {
     (COMMAND_ATTRIBUTES)(CC_NTC2_GetConfig             *  // 0x20000213
 			 (IS_IMPLEMENTED+NO_SESSIONS)),
 #endif
-#endif
+#endif	/* TPM_TSS_NUVOTON */
     
     0
 };

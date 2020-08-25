@@ -3,9 +3,8 @@
 /*			    VerifySignature					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: verifysignature.c 1290 2018-08-01 14:45:24Z kgoldman $	*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -46,12 +45,6 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <openssl/objects.h>
-#include <openssl/rsa.h>
-#include <openssl/ecdsa.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
 #include <ibmtss/Unmarshal_fp.h>
@@ -68,7 +61,7 @@ TPM_RC rawUnmarshal(TPMT_SIGNATURE *target,
 		    TPMI_ALG_HASH halg,
 		    uint8_t *buffer, size_t length);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -79,6 +72,7 @@ int main(int argc, char *argv[])
     VerifySignature_Out 	out;
     TPMI_DH_OBJECT		keyHandle = 0;
     const char			*pemFilename = NULL;
+    const char			*hmacKeyFilename = NULL;
     const char			*signatureFilename = NULL;
     TPMI_ALG_HASH		halg = TPM_ALG_SHA256;
     TPMI_ALG_PUBLIC 		algPublic = TPM_ALG_RSA;
@@ -102,6 +96,7 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1"); 
+    tssUtilsVerbose = FALSE;
 
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
@@ -122,6 +117,16 @@ int main(int argc, char *argv[])
 	    }
 	    else {
 		printf("-ipem option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i],"-ihmac") == 0) {
+	    i++;
+	    if (i < argc) {
+		hmacKeyFilename = argv[i];
+	    }
+	    else {
+		printf("-ihmac option needs a value\n");
 		printUsage();
 	    }
 	}
@@ -270,7 +275,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -278,8 +283,8 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
     }
-    if ((keyHandle == 0) && (pemFilename == NULL)) {
-	printf("Missing handle parameter -hk or PEM file name -ipem\n");
+    if ((keyHandle == 0) && (pemFilename == NULL) && (hmacKeyFilename == NULL)) {
+	printf("Missing handle parameter -hk, PEM file name -ipem, or HMAC key file name -ihmac\n");
 	printUsage();
     }
     if (messageFilename == NULL) {
@@ -299,7 +304,7 @@ int main(int argc, char *argv[])
     if (rc == 0) {
 	if (doHash) {
 	    if (rc == 0) {
-		if (verbose) printf("verifysignature: Hashing message file %s with halg %04x\n",
+		if (tssUtilsVerbose) printf("verifysignature: Hashing message file %s with halg %04x\n",
 				    messageFilename, halg);
 		digest.hashAlg = halg;
 		sizeInBytes = TSS_GetDigestSize(digest.hashAlg);
@@ -308,19 +313,19 @@ int main(int argc, char *argv[])
 				       0, NULL);
 	    }
 	    if (rc == 0) {
-		if (verbose) printf("verifysignature: Copying hash\n");
+		if (tssUtilsVerbose) printf("verifysignature: Copying hash\n");
 		/* digest to be verified */
 		in.digest.t.size = sizeInBytes;
 		memcpy(&in.digest.t.buffer, (uint8_t *)&digest.digest, sizeInBytes);
 	    }
 	}
 	else {
-	    if (verbose) printf("verifysignature: Using hash input file %s\n", messageFilename);
-	    in.digest.t.size = dataLength;
+	    if (tssUtilsVerbose) printf("verifysignature: Using hash input file %s\n", messageFilename);
+	    in.digest.t.size = (uint16_t)dataLength;
 	    memcpy(&in.digest.t.buffer, (uint8_t *)data, dataLength);
 	}
 	if (rc == 0) {
-	    if (verbose) TSS_PrintAll("verifysignature: hash",
+	    if (tssUtilsVerbose) TSS_PrintAll("verifysignature: hash",
 				      (uint8_t *)&in.digest.t.buffer, in.digest.t.size);
 	}
     }
@@ -370,7 +375,7 @@ int main(int argc, char *argv[])
 	}
 	if ((rc == 0) && (ticketFilename != NULL)) {
 	    rc = TSS_File_WriteStructure(&out.validation,
-					 (MarshalFunction_t)TSS_TPMT_TK_VERIFIED_Marshal,
+					 (MarshalFunction_t)TSS_TPMT_TK_VERIFIED_Marshalu,
 					 ticketFilename);
 	}
     }
@@ -382,9 +387,20 @@ int main(int argc, char *argv[])
 					halg,
 					pemFilename);
 	}
+	if (tssUtilsVerbose) printf("verifysignature: verifySignatureFromPem rc %08x\n", rc);
+    }
+    if (hmacKeyFilename != NULL) {
+	if (rc == 0) {
+	    rc = verifySignatureFromHmacKey((uint8_t *)&in.digest.t.buffer,
+					    in.digest.t.size,
+					    &in.signature,
+					    halg,
+					    hmacKeyFilename); 
+	}
+	if (tssUtilsVerbose) printf("verifysignature: verifySignatureFromHmacKey rc %08x\n", rc);
     }
     if (rc == 0) {
-	if (verbose) printf("verifysignature: success\n");
+	if (tssUtilsVerbose) printf("verifysignature: success\n");
     }
     else {
 	const char *msg;
@@ -451,8 +467,9 @@ static void printUsage(void)
     printf("\t\t(default TPMT_SIGNATURE)\n");
     printf("\t-hk\tkey handle\n");
     printf("\t-ipem\tpublic key PEM format file name to verify signature\n");
+    printf("\t-ihmac\tHMAC key in raw binary format file name to verify signature\n");
     printf("\n");
-    printf("\t\tOne of -hk, -ipem must be specified\n");
+    printf("\t\tOne of -hk, -ipem, -ihmac must be specified\n");
     printf("\n");
     printf("\t[-tk\tticket file name (requires -hk)]\n");
     printf("\n");

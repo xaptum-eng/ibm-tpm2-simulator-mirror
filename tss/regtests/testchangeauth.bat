@@ -3,9 +3,8 @@ REM #										#
 REM #			TPM2 regression test					#
 REM #			     Written by Ken Goldman				#
 REM #		       IBM Thomas J. Watson Research Center			#
-REM #		$Id: testchangeauth.bat 1278 2018-07-23 21:20:42Z kgoldman $		#
 REM #										#
-REM # (c) Copyright IBM Corporation 2015					#
+REM # (c) Copyright IBM Corporation 2015 - 2020					#
 REM # 										#
 REM # All rights reserved.							#
 REM # 										#
@@ -49,7 +48,7 @@ for %%B in ("" "-bi 80000001 -pwdb sig") do (
     for %%S in ("" "-se0 02000000 1") do (
 
 	echo "Load the signing key under the primary key"
-	%TPM_EXE_PATH%load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+	%TPM_EXE_PATH%load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 	IF !ERRORLEVEL! NEQ 0 (
 	   exit /B 1
 	   )
@@ -67,7 +66,7 @@ for %%B in ("" "-bi 80000001 -pwdb sig") do (
 	   )
 
 	echo "Load the signing key with the changed auth %%~S"
-	%TPM_EXE_PATH%load -hp 80000000 -ipr tmppriv.bin -ipu signpub.bin -pwdp sto %%~S > run.out
+	%TPM_EXE_PATH%load -hp 80000000 -ipr tmppriv.bin -ipu signrsa2048pub.bin -pwdp sto %%~S > run.out
 	IF !ERRORLEVEL! NEQ 0 (
 	   exit /B 1
 	   )
@@ -104,6 +103,71 @@ for %%B in ("" "-bi 80000001 -pwdb sig") do (
 
 	)
 )
+
+echo ""
+echo "Object Change Auth with password from file"
+echo ""
+
+echo "Load the decryption key under the primary key 80000001"
+%TPM_EXE_PATH%load -hp 80000000 -ipr derrsa2048priv.bin -ipu derrsa2048pub.bin -pwdp sto > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Generate a random password"
+%TPM_EXE_PATH%getrandom -by 16 -ns -nz -of tmppwd.bin > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Object change auth, change password"
+%TPM_EXE_PATH%objectchangeauth -hp 80000000 -ho 80000001 -pwdo dec -ipwdn tmppwd.bin -opr tmppriv.bin > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Load the decryption key with the changed auth 800000002"
+%TPM_EXE_PATH%load -hp 80000000 -pwdp sto -ipr tmppriv.bin -ipu derrsa2048pub.bin > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Encrypt the message"
+%TPM_EXE_PATH%rsaencrypt -hk 80000002 -id policies/aaa -oe tmpenc.bin > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Decrypt the message"
+%TPM_EXE_PATH%rsadecrypt -hk 80000002 -ipwdk tmppwd.bin -ie tmpenc.bin -od tmpdec.bin > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Compare the result"
+tail --bytes=3 tmpdec.bin > tmp.bin
+diff policies/aaa tmp.bin
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Flush the keypair 80000001"
+%TPM_EXE_PATH%flushcontext -ha 80000001 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Flush the keypair 80000002"
+%TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+REM cleanup
+
+rm tmppwd.bin
+rm tmpenc.bin
+rm tmpdec.bin
 
 exit /B 0
 

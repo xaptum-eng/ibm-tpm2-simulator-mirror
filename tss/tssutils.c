@@ -54,7 +54,14 @@
 #include <ibmtss/tsserror.h>
 #include <ibmtss/tssprint.h>
 
+/* the TSS context must be larger when files are not used, since TSS object and NV state is held in
+   the volatile context.  The major factor is the number of TSS_OBJECT_PUBLIC slots.  See
+   tssproperties.c */
+#ifdef TPM_TSS_NOFILE
+#define TSS_ALLOC_MAX  0x12000  /* 73k bytes */
+#else
 #define TSS_ALLOC_MAX  0x10000  /* 64k bytes */
+#endif
 
 extern int tssVerbose;
 extern int tssVverbose;
@@ -105,7 +112,7 @@ TPM_RC TSS_Malloc(unsigned char **buffer, uint32_t size)
 TPM_RC TSS_Realloc(unsigned char **buffer, uint32_t size)
 {
     TPM_RC          	rc = 0;
-    unsigned char 	*tmpptr;
+    unsigned char 	*tmpptr = NULL;
     
     /* verify that the size is not "too large" */
     if (rc == 0) {
@@ -225,7 +232,9 @@ TPM_RC TSS_TPM2B_Create(TPM2B *target, uint8_t *buffer, uint16_t size, uint16_t 
     }
     if (rc == 0) {
 	target->size = size;
-	memmove(target->buffer, buffer, size);
+	if (size != 0) {	/* because buffer can be NULL if size os 0 */
+	    memmove(target->buffer, buffer, size);
+	}
     }
     return rc;
 }
@@ -311,3 +320,45 @@ int TSS_TPM2B_Compare(TPM2B *expect, TPM2B *actual)
     return match;
 }
 
+/* TSS_GetDigestSize() returns the digest size in bytes based on the hash algorithm.
+
+   Returns 0 for an unknown algorithm.
+*/
+
+/* NOTE: Marked as const function in header */
+
+uint16_t TSS_GetDigestSize(TPM_ALG_ID hashAlg)
+{
+    uint16_t size;
+
+    switch (hashAlg) {
+#ifdef TPM_ALG_SHA1
+      case TPM_ALG_SHA1:
+	size = SHA1_DIGEST_SIZE;
+	break;
+#endif
+#ifdef TPM_ALG_SHA256
+     case TPM_ALG_SHA256:
+	size = SHA256_DIGEST_SIZE;
+	break;
+#endif
+#ifdef TPM_ALG_SHA384
+      case TPM_ALG_SHA384:
+	size = SHA384_DIGEST_SIZE;
+	break;
+#endif
+#ifdef TPM_ALG_SHA512
+     case TPM_ALG_SHA512:
+	size = SHA512_DIGEST_SIZE;
+	break;
+#endif
+#if 0
+      case TPM_ALG_SM3_256:
+	size = SM3_256_DIGEST_SIZE;
+	break;
+#endif
+      default:
+	size = 0;
+    }
+    return size;
+}

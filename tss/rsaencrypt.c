@@ -3,9 +3,8 @@
 /*			   RSA_Encrypt						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: rsaencrypt.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018					*/
+/* (c) Copyright IBM Corporation 2015 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -51,10 +50,13 @@
 #include <ibmtss/tssresponsecode.h>
 #include <ibmtss/tssmarshal.h>
 
+static TPM_RC getKeySize(TSS_CONTEXT 		*tssContext,
+			 TPMI_RSA_KEY_BITS	*keyBits,
+			 TPMI_DH_PCR		objectHandle);
 static void printRsaEncrypt(RSA_Encrypt_Out *out);
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -64,6 +66,7 @@ int main(int argc, char *argv[])
     RSA_Encrypt_In 		in;
     RSA_Encrypt_Out 		out;
     TPMI_DH_OBJECT		keyHandle = 0;
+    TPMI_RSA_KEY_BITS		keyBits;
     const char			*decryptFilename = NULL;
     const char			*encryptFilename = NULL;
 
@@ -73,7 +76,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hk") == 0) {
@@ -110,7 +114,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -126,13 +130,21 @@ int main(int argc, char *argv[])
 	printf("Missing decrypted file -id\n");
 	printUsage();
     }
+    /* Start a TSS context */
     if (rc == 0) {
-	rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	rc = TSS_Create(&tssContext);
+    }
+    /* get the public modulus size for checks and padding */
+    if (rc == 0) {
+	rc = getKeySize(tssContext, &keyBits, keyHandle);
+    }
+     if (rc == 0) {
+	rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 				     &length,
 				     decryptFilename);
     }
     if (rc == 0) {
-	if (length > 256) {
+	if (length > (keyBits / 8U)) {
 	    printf("Input data too long %u\n", (unsigned int)length);
 	    rc = TSS_RC_INSUFFICIENT_BUFFER;
 	}
@@ -153,16 +165,14 @@ int main(int argc, char *argv[])
 	}
 	/* label */
 	{
+	    /* NOTE: label requires the last byte to be zero.  I.e., when implemented, do not set
+	       the in.label.t.size to strlen() */
 	    /* Table 73 - Definition of TPM2B_DATA Structure */
 	    in.label.t.size = 0;
 	}
     }
-    free (buffer);
+    free (buffer);	/* @1 */
     buffer = NULL;
-    /* Start a TSS context */
-    if (rc == 0) {
-	rc = TSS_Create(&tssContext);
-    }
     /* call TSS to execute the command */
     if (rc == 0) {
 	rc = TSS_Execute(tssContext,
@@ -182,7 +192,7 @@ int main(int argc, char *argv[])
 	rc = TSS_Structure_Marshal(&buffer,	/* freed @1 */
 				   &written,
 				   &out.outData,
-				   (MarshalFunction_t)TSS_TPM2B_PUBLIC_KEY_RSA_Marshal);
+				   (MarshalFunction_t)TSS_TPM2B_PUBLIC_KEY_RSA_Marshalu);
     }
     if ((rc == 0) && (encryptFilename != NULL)) {
 	rc = TSS_File_WriteBinaryFile(buffer + sizeof(uint16_t),
@@ -190,8 +200,8 @@ int main(int argc, char *argv[])
 				      encryptFilename); 
     }    
     if (rc == 0) {
-	if (verbose) printRsaEncrypt(&out);
-	if (verbose) printf("rsaencrypt: success\n");
+	if (tssUtilsVerbose) printRsaEncrypt(&out);
+	if (tssUtilsVerbose) printf("rsaencrypt: success\n");
     }
     else {
 	const char *msg;
@@ -203,6 +213,33 @@ int main(int argc, char *argv[])
 	rc = EXIT_FAILURE;
     }
     free(buffer);	/* @1 */
+    return rc;
+}
+
+/* getKeySize() gets the key size in bits */
+
+static TPM_RC getKeySize(TSS_CONTEXT 		*tssContext,
+			 TPMI_RSA_KEY_BITS	*keyBits,
+			 TPMI_DH_PCR		objectHandle)
+{
+    TPM_RC			rc = 0;
+    ReadPublic_In 		in;
+    ReadPublic_Out 		out;
+
+    /* call TSS to execute the command */
+    if (rc == 0) {
+	in.objectHandle = objectHandle;
+	rc = TSS_Execute(tssContext,
+			 (RESPONSE_PARAMETERS *)&out, 
+			 (COMMAND_PARAMETERS *)&in,
+			 NULL,
+			 TPM_CC_ReadPublic,
+			 TPM_RH_NULL, NULL, 0);
+    }
+    if (rc == 0) {
+	*keyBits = out.outPublic.publicArea.parameters.rsaDetail.keyBits;
+	if (tssUtilsVerbose) printf("getKeySize: size %u\n", *keyBits);
+    }
     return rc;
 }
 

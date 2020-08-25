@@ -3,9 +3,8 @@
 /*			 Object Templates					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: objecttemplates.h 1015 2017-06-07 13:16:34Z kgoldman $	*/
 /*										*/
-/* (c) Copyright IBM Corporation 2016.						*/
+/* (c) Copyright IBM Corporation 2016 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -54,6 +53,8 @@
 #define TYPE_DP		10
 #define TYPE_DAA        11
 #define TYPE_DAAR       12
+#define TYPE_KHR	13
+#define TYPE_DEE	14
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +65,7 @@ extern "C" {
 			      TPMA_OBJECT deleteObjectAttributes,
 			      int type,
 			      TPMI_ALG_PUBLIC algPublic,
+			      TPMI_RSA_KEY_BITS keyBits,
 			      TPMI_ECC_CURVE curveID,			       
 			      TPMI_ALG_HASH nalg,
 			      TPMI_ALG_HASH halg,
@@ -77,6 +79,7 @@ extern "C" {
     TPM_RC keyedHashPublicTemplate(TPMT_PUBLIC *publicArea,
 				   TPMA_OBJECT addObjectAttributes,
 				   TPMA_OBJECT deleteObjectAttributes,
+				   int type,
 				   TPMI_ALG_HASH nalg,
 				   TPMI_ALG_HASH halg,
 				   const char *policyFilename);

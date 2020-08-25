@@ -6,9 +6,8 @@
 #			TPM2 regression test					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	$Id: reg.sh 1291 2018-08-01 15:53:40Z kgoldman $			#
 #										#
-# (c) Copyright IBM Corporation 2014 - 2018					#
+# (c) Copyright IBM Corporation 2014 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -63,9 +62,12 @@
 
 PREFIX=./
 
-# The rpm release prefixes all the utility names with tss, so PREFIX is set to tss
+# The distro releases prefix all the TPM 2.0 utility names with tss,
+# so PREFIX is set to tss
 
 # PREFIX=tss
+
+#PREFIX="valgrind ./"
 
 # hash algorithms to be used for testing
 
@@ -107,6 +109,9 @@ printUsage ()
     echo "-27 Duplication"
     echo "-28 ECC"
     echo "-29 Credential"
+    echo "-30 Attestation - rev 155" 
+    echo "-31 X509 - rev 155" 
+    echo "-32 Get Capability"
     echo "-35 Shutdown (only run for simulator)"
     echo "-40 Tests under development (not part of all)"
     echo ""
@@ -153,35 +158,61 @@ cleanup()
 # stdout
     rm -f run.out
 # general purpose keys
-    rm -f storepriv.bin
-    rm -f storepub.bin
-    rm -f storeeccpub.bin
-    rm -f storeeccpriv.bin
-    rm -f signpriv.bin
-    rm -f signpub.bin
-    rm -f signpub.pem
-    rm -f signeccpriv.bin
-    rm -f signeccpub.bin
-    rm -f signeccpub.pem
-    rm -f signrpriv.bin
-    rm -f signrpub.bin
-    rm -f signrpub.pem
-    rm -f derpriv.bin
-    rm -f derpub.bin
     rm -f despriv.bin
     rm -f despub.bin
-    rm -f khprivsha1.bin
-    rm -f khprivsha256.bin
-    rm -f khprivsha384.bin
-    rm -f khprivsha512.bin
-    rm -f khpubsha1.bin
-    rm -f khpubsha256.bin
-    rm -f khpubsha384.bin
-    rm -f khpubsha512.bin
-    rm -f pritk.bin
-    rm -f stotk.bin
     rm -f prich.bin
-    rm -f stoch.bin
+    rm -f pritk.bin
+
+    for HALG in ${ITERATE_ALGS}
+    do
+	rm -f khpriv${HALG}.bin
+	rm -f khpub${HALG}.bin
+	rm -f khrpriv${HALG}.bin
+	rm -f khrpub${HALG}.bin
+    done
+
+    for BITS in 2048 3072
+    do
+	rm -f signrsa${BITS}priv.bin
+	rm -f signrsa${BITS}pub.bin
+	rm -f signrsa${BITS}pub.pem
+	rm -f derrsa${BITS}priv.bin
+	rm -f derrsa${BITS}pub.bin
+	rm -f signrsa${BITS}rpriv.bin
+	rm -f signrsa${BITS}rpub.bin
+	rm -f signrsa${BITS}rpub.pem
+	rm -f signrsa${BITS}nfpriv.bin
+	rm -f signrsa${BITS}nfpub.bin
+	rm -f signrsa${BITS}nfpub.pem
+	rm -r storersa${BITS}priv.bin
+	rm -r storersa${BITS}pub.bin
+	rm -f storersa${BITS}ch.bin
+	rm -f storersa${BITS}tk.bin
+    done
+
+    for CURVE in nistp256 nistp384
+    do
+	rm -f storeecc${CURVE}priv.bin
+	rm -f storeecc${CURVE}pub.bin
+
+	rm -f signecc${CURVE}priv.bin
+	rm -f signecc${CURVE}pub.bin
+	rm -f signecc${CURVE}pub.pem
+
+	rm -f signecc${CURVE}rpriv.bin
+	rm -f signecc${CURVE}rpub.bin
+	rm -f signecc${CURVE}rpub.pem
+
+	rm -f signecc${CURVE}nfpriv.bin
+	rm -f signecc${CURVE}nfpub.bin
+	rm -f signecc${CURVE}nfpub.pem
+
+	rm -f tmpkeypairecc${CURVE}.pem
+	rm -f tmpkeypairecc${CURVE}.der
+
+    done
+    rm -f stotk.bin
+
 # misc
     rm -f dec.bin
     rm -f enc.bin
@@ -208,10 +239,11 @@ cleanup()
 
 initprimary()
 {
-    echo "Create a platform primary storage key"
-    ${PREFIX}createprimary -hi p -pwdk sto -tk pritk.bin -ch prich.bin > run.out
+    echo "Create a platform primary RSA storage key"
+    ${PREFIX}createprimary -hi p -pwdk sto -pol policies/zerosha256.bin -tk pritk.bin -ch prich.bin > run.out
     checkSuccess $?
 }
+
 
 export -f checkSuccess
 export -f checkWarning
@@ -219,6 +251,8 @@ export -f checkFailure
 export WARN
 export PREFIX
 export -f initprimary
+# hack because the mbedtls port is incomplete
+export CRYPTOLIBRARY=`${PREFIX}getcryptolibrary`
 
 # example for running scripts with encrypted sessions, see TPM_SESSION_ENCKEY=getrandom below
 export TPM_SESSION_ENCKEY
@@ -231,6 +265,9 @@ main ()
 
     if [ "$1" == "-h" ]; then
 	printUsage
+	echo ""
+	echo "crypto library is ${CRYPTOLIBRARY}"
+	echo ""
 	exit 0
     else
 	# the MS simulator needs power up and startup
@@ -480,6 +517,30 @@ main ()
     fi
     if [ "$1" == "-a" ] || [ "$1" == "-29" ]; then
     	./regtests/testcredential.sh
+    	RC=$?
+	if [ $RC -ne 0 ]; then
+	    exit 255
+	fi
+	((I++))
+    fi
+    if [ "$1" == "-a" ] || [ "$1" == "-30" ]; then
+    	./regtests/testattest155.sh
+    	RC=$?
+	if [ $RC -ne 0 ]; then
+	    exit 255
+	fi
+	((I++))
+    fi
+    if [ "$1" == "-a" ] || [ "$1" == "-31" ]; then
+    	./regtests/testx509.sh
+    	RC=$?
+	if [ $RC -ne 0 ]; then
+	    exit 255
+	fi
+	((I++))
+    fi
+    if [ "$1" == "-a" ] || [ "$1" == "-32" ]; then
+    	./regtests/testgetcap.sh
     	RC=$?
 	if [ $RC -ne 0 ]; then
 	    exit 255

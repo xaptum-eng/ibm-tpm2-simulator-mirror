@@ -1,11 +1,10 @@
 /********************************************************************************/
 /*										*/
-/*		      Extend an IMA measurement list into PCR 10		*/
+/*		      Extend an IMA measurement list into PCRs			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: imaextend.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2014 - 2018.					*/
+/* (c) Copyright IBM Corporation 2014 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -55,11 +54,10 @@
 
 #include <unistd.h>
 
-#include <openssl/err.h>
-
 #include <ibmtss/tss.h>
 #include <ibmtss/tssresponsecode.h>
 #include <ibmtss/tsscryptoh.h>
+#include <ibmtss/tssutils.h>
 
 #include "imalib.h"
 
@@ -71,7 +69,7 @@ static TPM_RC pcrread(TSS_CONTEXT *tssContext,
 		      TPMI_DH_PCR pcrHandle);
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 int vverbose = FALSE;
 
 int main(int argc, char * argv[])
@@ -91,10 +89,13 @@ int main(int argc, char * argv[])
     unsigned long	beginEvent = 0;			/* default beginning of log */
     unsigned long	endEvent = 0xffffffff;		/* default end of log */
     unsigned int	loopTime = 0;			/* default no loop */
+    ImaEvent 		imaEvent;
+    unsigned int 	lineNum;
     
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-	
+    tssUtilsVerbose = FALSE;
+    
     for (i=1 ; i<argc ; i++) {
 	if (strcmp(argv[i],"-if") == 0) {
 	    i++;
@@ -147,7 +148,7 @@ int main(int argc, char * argv[])
 	    printUsage();
 	}
 	else if (!strcmp(argv[i], "-v")) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    vverbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
@@ -175,7 +176,7 @@ int main(int argc, char * argv[])
 		memset((uint8_t *)&in.digests.digests[algs].digest, 0, sizeof(TPMU_HA));
 	    }
 	}
-	if ((rc == 0) && verbose) {
+	if ((rc == 0) && tssUtilsVerbose) {
 	    printf("Initial PCR 10 value\n");
 	    rc = pcrread(tssContext, 10);
 	}
@@ -192,8 +193,6 @@ int main(int argc, char * argv[])
 	    }
 	}
     }
-    ImaEvent imaEvent;
-    unsigned int lineNum;
     /*
       scan each measurement 'line' in the binary
     */
@@ -220,9 +219,26 @@ int main(int argc, char * argv[])
 	    if ((rc == 0) && (lineNum >= beginEvent) && (lineNum <= endEvent) && !endOfFile) {
 		/* debug tracing */
 		if (rc == 0) {
-		    if (verbose) printf("\n");
+		    ImaTemplateData imaTemplateData;
+		    if (tssUtilsVerbose) printf("\n");
 		    printf("imaextend: line %u\n", lineNum);
-		    if (verbose) IMA_Event_Trace(&imaEvent, FALSE);
+		    if (tssUtilsVerbose) {
+			IMA_Event_Trace(&imaEvent, FALSE);
+			/* unmarshal the template data */
+			if (rc == 0) {
+			    rc = IMA_TemplateData_ReadBuffer(&imaTemplateData,
+							     &imaEvent,
+							     littleEndian);
+			}
+			if (rc == 0) {
+			    IMA_TemplateData_Trace(&imaTemplateData,
+						   imaEvent.nameInt);
+			}
+			else {
+			    printf("imaextend: Error parsing template data, event %u\n", lineNum);
+			    rc = 0;		/* not a fatal error */
+			}
+		    }
 		}
 		if (!sim) {
 		    if (rc == 0) {
@@ -241,17 +257,38 @@ int main(int argc, char * argv[])
 					 TPM_RS_PW, NULL, 0,
 					 TPM_RH_NULL, NULL, 0);
 		    }
-		    if (rc == 0 && verbose) {
+		    if (rc == 0 && tssUtilsVerbose) {
 			rc = pcrread(tssContext, imaEvent.pcrIndex);
 		    }
 		}
 		else {		/* sim */
-		    rc = IMA_Event_PcrExtend(simPcrs, &imaEvent);
+		    /* even though IMA_Event_ReadFile() range checks the PCR index, range check it
+		       again here to silence the static analysis tool */
+		    if (rc == 0) {
+			if (imaEvent.pcrIndex >= IMPLEMENTATION_PCR) {
+			    printf("imaextend: PCR index %u %08x out of range\n",
+				   imaEvent.pcrIndex, imaEvent.pcrIndex);
+			    rc = TSS_RC_BAD_PROPERTY_VALUE;
+			}
+		    }
+		    if (rc == 0) {
+			rc = IMA_Event_PcrExtend(simPcrs, &imaEvent);
+		    }
+		    if (rc == 0 && tssUtilsVerbose) {
+			TSS_PrintAll("PCR digest SHA-1",
+				     simPcrs[0][imaEvent.pcrIndex].digest.tssmax,
+				     SHA1_DIGEST_SIZE);
+			TSS_PrintAll("PCR digest SHA-256",
+				     simPcrs[1][imaEvent.pcrIndex].digest.tssmax,
+				     SHA256_DIGEST_SIZE);
+			
+			
+		    }
 		}
 	    }	/* for each IMA event in range */
 	    IMA_Event_Free(&imaEvent);
 	}	/* for each IMA event line */
-	if (verbose && (loopTime != 0)) printf("set beginEvent to %u\n", lineNum-1);
+	if (tssUtilsVerbose && (loopTime != 0)) printf("set beginEvent to %u\n", lineNum-1);
 	beginEvent = lineNum-1;		/* remove the last increment at EOF */
 	if (infile != NULL) {
 	    fclose(infile);
@@ -274,19 +311,20 @@ int main(int argc, char * argv[])
 	for (bankNum = 0 ; (rc == 0) && (bankNum < IMA_PCR_BANKS) ; bankNum++) {
 	    TSS_TPM_ALG_ID_Print("algorithmId", simPcrs[bankNum][0].hashAlg, 0);
 	    for (pcrNum = 0 ; pcrNum < IMPLEMENTATION_PCR ; pcrNum++) {
-	        char pcrString[9];	/* PCR number */
+	        char 		pcrString[9];	/* PCR number */
+		uint16_t 	digestSize;
 		sprintf(pcrString, "PCR %02u:", pcrNum);
 		/* TSS_PrintAllLogLevel() with a log level of LOGLEVEL_INFO to print the byte
 		   array on one line with no length */
-		uint16_t digestSize = TSS_GetDigestSize(simPcrs[bankNum][pcrNum].hashAlg);
+		digestSize = TSS_GetDigestSize(simPcrs[bankNum][pcrNum].hashAlg);
 		TSS_PrintAllLogLevel(LOGLEVEL_INFO, pcrString, 1,
-				     simPcrs[bankNum ][pcrNum].digest.tssmax,
+				     simPcrs[bankNum][pcrNum].digest.tssmax,
 				     digestSize);
 	    }
 	}
     }
     if (rc == 0) {
-	if (verbose) printf("imaextend: success\n");
+	if (tssUtilsVerbose) printf("imaextend: success\n");
     }
     else {
 	const char *msg;
@@ -305,10 +343,10 @@ static TPM_RC copyDigest(PCR_Extend_In 	*in,
 {
     TPM_RC 		rc = 0;
     unsigned char 	zeroDigest[SHA1_DIGEST_SIZE];
-
+    int 		notAllZero;
     if (rc == 0) {
 	memset(zeroDigest, 0, SHA1_DIGEST_SIZE);
-	int notAllZero = memcmp(imaEvent->digest, zeroDigest, SHA1_DIGEST_SIZE);
+	notAllZero = memcmp(imaEvent->digest, zeroDigest, SHA1_DIGEST_SIZE);
 	/* the SHA-256 bank has already been 0 extended, so only the first 20 bytes need be
 	   copied */
 	if (notAllZero) {

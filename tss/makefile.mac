@@ -3,9 +3,8 @@
 #			Mac TPM2 Utilities Makefile				#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	      $Id: makefile.mac 1294 2018-08-09 19:08:34Z kgoldman $		#
 #										#
-# (c) Copyright IBM Corporation 2017, 2018					#
+# (c) Copyright IBM Corporation 2017 - 2019					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -214,13 +213,15 @@ clean:
 activatecredential:	ibmtss/tss.h activatecredential.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) activatecredential.o $(LNALIBS) -o activatecredential
 eventextend:		eventextend.o eventlib.o $(LIBTSS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) eventextend.o eventlib.o $(LNALIBS) -o eventextend
+			$(CC) $(LNFLAGS) $(LNAFLAGS) eventextend.o $(LNALIBS) -o eventextend
 imaextend:		imaextend.o imalib.o $(LIBTSS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) imaextend.o imalib.o $(LNALIBS) -o imaextend
+			$(CC) $(LNFLAGS) $(LNAFLAGS) imaextend.o $(LNALIBS) -o imaextend
 certify:		ibmtss/tss.h certify.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) certify.o $(LNALIBS) -o certify
 certifycreation:	ibmtss/tss.h certifycreation.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) certifycreation.o $(LNALIBS) -o certifycreation
+certifyx509:		ibmtss/tss.h certifyx509.o $(LIBTSS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) certifyx509.o $(LNALIBS) -o certifyx509
 changeeps:		ibmtss/tss.h changeeps.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) changeeps.o $(LNALIBS) -o changeeps
 changepps:		ibmtss/tss.h changepps.o $(LIBTSS)
@@ -401,6 +402,8 @@ sequencecomplete:	ibmtss/tss.h sequencecomplete.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) sequencecomplete.o $(LNALIBS) -o sequencecomplete
 setprimarypolicy:	ibmtss/tss.h setprimarypolicy.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) setprimarypolicy.o $(LNALIBS) -o setprimarypolicy
+setcommandcodeauditstatus:	ibmtss/tss.h setcommandcodeauditstatus.o $(LIBTSS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) setcommandcodeauditstatus.o $(LNALIBS) -o setcommandcodeauditstatus
 shutdown:		ibmtss/tss.h shutdown.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) shutdown.o $(LNALIBS) -o shutdown
 sign:			ibmtss/tss.h sign.o cryptoutils.o $(LIBTSS)
@@ -437,6 +440,12 @@ ntc2preconfig:		ntc2preconfig.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) ntc2preconfig.o $(LNALIBS) -o ntc2preconfig
 ntc2lockconfig:		ntc2lockconfig.o $(LIBTSS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) ntc2lockconfig.o $(LNALIBS) -o ntc2lockconfig
+publicname:		publicname.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) publicname.o $(LNALIBS) -o publicname
+getcryptolibrary:	getcryptolibrary.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) getcryptolibrary.o $(LNALIBS) -o getcryptolibrary
+printattr:		printattr.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) printattr.o $(LNALIBS) -o printattr
 
 # for applications, not for TSS library
 

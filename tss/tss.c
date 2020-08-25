@@ -3,9 +3,8 @@
 /*			    TSS Primary API 					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tss.c 1257 2018-06-27 20:52:08Z kgoldman $			*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2018.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -85,12 +84,10 @@ TPM_RC TSS_Create(TSS_CONTEXT **tssContext)
 
     /* allocate the high level TSS structure */
     if (rc == 0) {
-	*tssContext = malloc(sizeof(TSS_CONTEXT));
-	if (*tssContext == NULL) {
-	    if (tssVerbose) printf("TSS_Create: malloc %u failed\n",
-				   (unsigned int)sizeof(TSS_CONTEXT));
-	    rc = TSS_RC_OUT_OF_MEMORY;
-	}
+	/* set to NULL for backward compatibility, caller may not have set tssContext to NULL before
+	   the call */
+	*tssContext = NULL;
+	rc = TSS_Malloc((unsigned char **)tssContext, sizeof(TSS_CONTEXT));
     }
     /* initialize the high level TSS structure */
     if (rc == 0) {
@@ -118,10 +115,11 @@ static TPM_RC TSS_Context_Init(TSS_CONTEXT *tssContext)
 {
     TPM_RC		rc = 0;
 #ifndef TPM_TSS_NOCRYPTO
+#ifndef TPM_TSS_NOFILE
     size_t		tssSessionEncKeySize;
     size_t		tssSessionDecKeySize;
 #endif
-    
+#endif
     /* at the first call to the TSS, initialize global variables */
     if (tssFirstCall) {		/* tssFirstCall is a library global */
 #ifndef TPM_TSS_NOCRYPTO
@@ -141,6 +139,7 @@ static TPM_RC TSS_Context_Init(TSS_CONTEXT *tssContext)
 	rc = TSS_Properties_Init(tssContext);
     }
 #ifndef TPM_TSS_NOCRYPTO
+#ifndef TPM_TSS_NOFILE
     /* crypto library dependent code to allocate the session state encryption and decryption keys.
        They are probably always the same size, but it's safer not to assume that. */
     if (rc == 0) {
@@ -160,6 +159,7 @@ static TPM_RC TSS_Context_Init(TSS_CONTEXT *tssContext)
 	rc = TSS_AES_KeyGenerate(tssContext->tssSessionEncKey,
 				 tssContext->tssSessionDecKey);
     }
+#endif
 #endif
     return rc;
 }
@@ -188,8 +188,10 @@ TPM_RC TSS_Delete(TSS_CONTEXT *tssContext)
 	}
 #endif
 #ifndef TPM_TSS_NOCRYPTO
+#ifndef TPM_TSS_NOFILE
 	free(tssContext->tssSessionEncKey);
 	free(tssContext->tssSessionDecKey);
+#endif
 #endif
 	rc = TSS_Close(tssContext);
 	free(tssContext);

@@ -3,7 +3,6 @@
 /*			 Headers from Part 2    				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: TPM_Types.h 1315 2018-08-28 14:27:28Z kgoldman $		*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,7 +54,7 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2012-2018				*/
+/*  (c) Copyright IBM Corp. and others, 2012 - 2019				*/
 /*										*/
 /********************************************************************************/
 
@@ -417,6 +416,7 @@ typedef UINT16 TPM_ST;
 #define TPM_ST_ATTEST_QUOTE		0x8018	/* tag for an attestation structure	 */
 #define TPM_ST_ATTEST_TIME		0x8019	/* tag for an attestation structure	 */
 #define TPM_ST_ATTEST_CREATION		0x801A	/* tag for an attestation structure	*/
+#define TPM_ST_ATTEST_NV_DIGEST	        0x801C	/* tag for an attestation structure	*/
 #define TPM_ST_CREATION			0x8021	/* tag for a ticket type	 */
 #define TPM_ST_VERIFIED			0x8022	/* tag for a ticket type	 */
 #define TPM_ST_AUTH_SECRET		0x8023	/* tag for a ticket type	 */
@@ -544,6 +544,11 @@ typedef UINT32 TPM_PT;
 							   that are implemented */
 #define TPM_PT_VENDOR_COMMANDS		(PT_FIXED + 43)	/* number of vendor commands that are implemented */
 #define TPM_PT_NV_BUFFER_MAX		(PT_FIXED + 44)	/* the maximum data size in one NV write command */
+#define TPM_PT_MODES			(PT_FIXED + 45)	/* a TPMA_MODES value, indicating that the
+							   TPM is designed for these modes. */
+#define TPM_PT_MAX_CAP_BUFFER		(PT_FIXED + 46)	/* the maximum size of a
+							   TPMS_CAPABILITY_DATA structure returned
+							   in TPM2_GetCapability(). */
 #define PT_VAR				(PT_GROUP * 2)	/* the group of variable properties returned
 							   as TPMS_TAGGED_PROPERTY */
 
@@ -726,14 +731,15 @@ typedef TPM_HANDLE TPM_RH;
 
 /* Table 29 - Definition of (TPM_HANDLE) TPM_HC Constants <S> */
 
+typedef  TPM_HANDLE         TPM_HC;
 #define HR_HANDLE_MASK		0x00FFFFFF				/* to mask off the HR	 */
 #define HR_RANGE_MASK		0xFF000000				/* to mask off the variable part */
 #define HR_SHIFT		24		
-#define HR_PCR			(TPM_HT_PCR << HR_SHIFT)		
+#define HR_PCR			((TPM_HT_PCR) << HR_SHIFT)		
 #define HR_HMAC_SESSION		(TPM_HT_HMAC_SESSION << HR_SHIFT)		
 #define HR_POLICY_SESSION	(TPM_HT_POLICY_SESSION << HR_SHIFT)		
-#define HR_TRANSIENT		(TPM_HT_TRANSIENT << HR_SHIFT)		
-#define HR_PERSISTENT		(TPM_HT_PERSISTENT << HR_SHIFT)		
+#define HR_TRANSIENT		(TPM_HC)((((UINT32)TPM_HT_TRANSIENT) << HR_SHIFT))
+#define HR_PERSISTENT           (TPM_HC)((((UINT32)TPM_HT_PERSISTENT) << HR_SHIFT))
 #define HR_NV_INDEX		(TPM_HT_NV_INDEX << HR_SHIFT)		
 #define HR_PERMANENT		(TPM_HT_PERMANENT << HR_SHIFT)		
 #define PCR_FIRST		(HR_PCR + 0)				/* first PCR */
@@ -1189,6 +1195,38 @@ typedef union {
 #define TPMA_CC_RES		0xc0000000
 #define TPMA_CC_RESERVED	(0x003f0000 | 0xc0000000)
 
+    /* Table 38 - Definition of (UINT32) TPMA_MODES Bits <Out> */
+
+#if defined TPM_BITFIELD_LE
+
+    typedef union {
+	struct {
+	    unsigned int FIPS_140_2	: 1;	/* 0 indicates that the TPM is designed to comply with all of the FIPS 140-2 requirements at Level 1 or higher */
+	    unsigned int Reserved	: 31;	/* 31:1	shall be zero */
+	};
+	UINT32 val;
+    } TPMA_MODES;
+    
+#elif defined TPM_BITFIELD_BE
+
+typedef union {
+    struct {
+	unsigned int Reserved	: 31;	/* 31:1	shall be zero */
+	unsigned int FIPS_140_2	: 1;	/* 0 indicates that the TPM is designed to comply with all of the FIPS 140-2 requirements at Level 1 or higher */
+    };
+    UINT32 val;
+} TPMA_MODES;
+    
+#else 
+
+    typedef struct {
+	UINT32 val;
+    } TPMA_MODES;
+
+#endif
+
+#define TPMA_MODES_FIPS_140_2	 0x00000001
+    
 /* Table 38 - Definition of (BYTE) TPMI_YES_NO Type */
 
 typedef BYTE TPMI_YES_NO;
@@ -1247,6 +1285,10 @@ typedef TPM_HANDLE TPMI_RH_ENABLES;
 /* Table 49 - Definition of (TPM_HANDLE) TPMI_RH_HIERARCHY_AUTH Type <IN> */
 
 typedef TPM_HANDLE TPMI_RH_HIERARCHY_AUTH;
+
+/* Table 2:55 - Definition of TPMI_RH_HIERARCHY_POLICY Type  */
+
+typedef  TPM_HANDLE         TPMI_RH_HIERARCHY_POLICY;
 
 /* Table 50 - Definition of (TPM_HANDLE) TPMI_RH_PLATFORM Type <IN> */
 
@@ -1668,6 +1710,7 @@ typedef union {
     TPML_TAGGED_TPM_PROPERTY	tpmProperties;	/* TPM_CAP_TPM_PROPERTIES */
     TPML_TAGGED_PCR_PROPERTY	pcrProperties;	/* TPM_CAP_PCR_PROPERTIES */
     TPML_ECC_CURVE		eccCurves;	/* TPM_CAP_ECC_CURVES */
+    TPML_TAGGED_POLICY		authPolicies;	/* TPM_CAP_AUTH_POLICIES */
 } TPMU_CAPABILITIES;
     
 /* Table 107 - Definition of TPMS_CAPABILITY_DATA Structure <OUT> */
@@ -1749,7 +1792,11 @@ typedef struct {
     TPM2B_MAX_NV_BUFFER nvContents;	/* contents of the NV Index */
 } TPMS_NV_CERTIFY_INFO;
 
-/* Table 117 - Definition of (TPM_ST) TPMI_ST_ATTEST Type <OUT> */
+/* Table 125 - Definition of TPMS_NV_DIGEST_CERTIFY_INFO Structure <OUT> */
+typedef struct {
+    TPM2B_NAME		indexName;
+    TPM2B_DIGEST	nvDigest;
+} TPMS_NV_DIGEST_CERTIFY_INFO; 
 
 typedef TPM_ST TPMI_ST_ATTEST;
 
@@ -1763,6 +1810,7 @@ typedef union {
     TPMS_SESSION_AUDIT_INFO	sessionAudit;	/* TPM_ST_ATTEST_SESSION_AUDIT */
     TPMS_TIME_ATTEST_INFO	time;		/* TPM_ST_ATTEST_TIME */
     TPMS_NV_CERTIFY_INFO	nv;		/* TPM_ST_ATTEST_NV */
+    TPMS_NV_DIGEST_CERTIFY_INFO	nvDigest;	/* TPM_ST_ATTEST_NV_DIGEST */
 } TPMU_ATTEST;
 
 /* Table 119 - Definition of TPMS_ATTEST Structure <OUT> */

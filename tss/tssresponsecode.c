@@ -3,9 +3,8 @@
 /*			     TPM2 Response Code Printer				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tssresponsecode.c 1257 2018-06-27 20:52:08Z kgoldman $	*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -37,8 +36,19 @@
 /* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.		*/
 /********************************************************************************/
 
+#ifndef TPM_TSS_NO_PRINT
+
 #include <stdint.h>
 #include <stdlib.h>
+
+#ifdef TPM_WINDOWS
+#ifdef TPM_WINDOWS_TBSI
+#include <winsock2.h>
+#include <windows.h>
+#include <tbs.h>
+#endif  /* TPM_WINDOWS_TBSI */
+#endif	/* TPM_WINDOWS */
+
 
 #include <ibmtss/tssresponsecode.h>
 #include <ibmtss/tsserror.h>
@@ -174,7 +184,7 @@ const RC_TABLE tpm12Table [] = {
     {TPM_DEFEND_LOCK_RUNNING, "TPM 1.2 TPM_DEFEND_LOCK_RUNNING - The TPM is defending against dictionary attacks and is in some time-out period."},
 
 };
-#endif
+#endif	/*  TPM_TPM12 */
 
 static const char *TSS_ResponseCode_RcToText(const RC_TABLE *table, size_t tableSize, TPM_RC rc);
 static const char *TSS_ResponseCode_NumberToText(unsigned int num);
@@ -324,6 +334,7 @@ const RC_TABLE tssTable [] = {
     {TSS_RC_MALFORMED_RESPONSE, "TSS_RC_MALFORMED_RESPONSE - A response packet was fundamentally malformed"},
     {TSS_RC_NULL_PARAMETER, "TSS_RC_NULL_PARAMETER - A required parameter was NULL"},
     {TSS_RC_NOT_IMPLEMENTED, "TSS_RC_NOT_IMPLEMENTED - TSS function is not implemented"},
+    {TSS_RC_BAD_READ_VALUE, "TSS_RC_BAD_READ_VALUE - Actual read value different from expected"},
     {TSS_RC_FILE_OPEN, "TSS_RC_FILE_OPEN - The file could not be opened"},
     {TSS_RC_FILE_SEEK, "TSS_RC_FILE_SEEK - A file seek failed"},
     {TSS_RC_FILE_FTELL, "TSS_RC_FILE_FTELL - A file ftell failed"},
@@ -338,6 +349,7 @@ const RC_TABLE tssTable [] = {
     {TSS_RC_NAME_NOT_IMPLEMENTED, "TSS_RC_NAME_NOT_IMPLEMENTED - name calculation not implemented for handle type"},
     {TSS_RC_MALFORMED_NV_PUBLIC, "TSS_RC_MALFORMED_NV_PUBLIC - The NV public structure does not match the name"},
     {TSS_RC_NAME_FILENAME, "TSS_RC_NAME_FILENAME - The name filename function has inconsistent arguments"},
+    {TSS_RC_MALFORMED_PUBLIC, "TSS_RC_MALFORMED_PUBLIC -The public structure does not match the name"},
     {TSS_RC_DECRYPT_SESSIONS, "TSS_RC_DECRYPT_SESSIONS - More than one command decrypt session"},
     {TSS_RC_ENCRYPT_SESSIONS, "TSS_RC_ENCRYPT_SESSIONS - More than one response encrypt session"},
     {TSS_RC_NO_DECRYPT_PARAMETER, "TSS_RC_NO_DECRYPT_PARAMETER - Command has no decrypt parameter"},
@@ -366,6 +378,7 @@ const RC_TABLE tssTable [] = {
     {TSS_RC_EC_SIGNATURE, "TSS_RC_EC_SIGNATURE - EC signature is bad"},
     {TSS_RC_EC_KEY_CONVERT, "TSS_RC_EC_KEY_CONVERT - EC key conversion failed"},
     {TSS_RC_X509_ERROR, "TSS_RC_X509_ERROR - X509 parse error"},
+    {TSS_RC_PEM_ERROR, "TSS_RC_PEM_ERROR - PEM parse error"},
     {TSS_RC_BAD_SIGNATURE_ALGORITHM, "TSS_RC_BAD_SIGNATURE_ALGORITHM - Unimplemented signature algorithm"},
     {TSS_RC_COMMAND_UNIMPLEMENTED, "TSS_RC_COMMAND_UNIMPLEMENTED - Unimplemented command"},
     {TSS_RC_IN_PARAMETER, "TSS_RC_IN_PARAMETER - Bad in parameter to TSS_Execute"},
@@ -376,8 +389,51 @@ const RC_TABLE tssTable [] = {
     {TSS_RC_FAIL, "TSS_RC_FAIL - TSS internal failure"},
     {TSS_RC_NO_SESSION_SLOT, "TSS_RC_NO_SESSION_SLOT - TSS context has no session slot for handle"},
     {TSS_RC_NO_OBJECTPUBLIC_SLOT, "TSS_RC_NO_OBJECTPUBLIC_SLOT - TSS context has no object public slot for handle"},
-    {TSS_RC_NO_NVPUBLIC_SLOT, "TSS_RC_NO_NVPUBLIC_SLOT -TSS context has no NV public slot for handle"}
+    {TSS_RC_NO_NVPUBLIC_SLOT, "TSS_RC_NO_NVPUBLIC_SLOT -TSS context has no NV public slot for handle"},
 };
+
+#ifdef TPM_WINDOWS
+#ifdef TPM_WINDOWS_TBSI
+
+/* Windows TBS, see winerror.h */
+
+const RC_TABLE tbsTable [] = {
+    {TBS_E_INTERNAL_ERROR, "TBS_E_INTERNAL_ERROR - An internal software error occurred"},
+    {TBS_E_BAD_PARAMETER, "TBS_E_BAD_PARAMETER - One or more parameter values are not valid"},
+    {TBS_E_INVALID_OUTPUT_POINTER, "TBS_E_INVALID_OUTPUT_POINTER - A specified output pointer is bad"},
+    {TBS_E_INVALID_CONTEXT, "TBS_E_INVALID_CONTEXT - The specified context handle does not refer to a valid context"},
+    {TBS_E_INSUFFICIENT_BUFFER, "TBS_E_INSUFFICIENT_BUFFER - The specified output buffer is too small"},
+    {TBS_E_IOERROR, "TBS_E_IOERROR - An error occurred while communicating with the TPM"},
+    {TBS_E_INVALID_CONTEXT_PARAM, "TBS_E_INVALID_CONTEXT_PARAM - A context parameter that is not valid was passed when attempting to create a TBS context"},
+    {TBS_E_SERVICE_NOT_RUNNING, "TBS_E_SERVICE_NOT_RUNNING - The TBS service is not running and could not be started"},
+    {TBS_E_TOO_MANY_TBS_CONTEXTS, "TBS_E_TOO_MANY_TBS_CONTEXTS - A new context could not be created because there are too many open contexts"},
+    {TBS_E_TOO_MANY_RESOURCES, "TBS_E_TOO_MANY_RESOURCES - A new virtual resource could not be created because there are too many open virtual resources"},
+    {TBS_E_SERVICE_START_PENDING, "TBS_E_SERVICE_START_PENDING - The TBS service has been started but is not yet running"},
+    {TBS_E_PPI_NOT_SUPPORTED, "TBS_E_PPI_NOT_SUPPORTED - The physical presence interface is not supported"},
+    {TBS_E_COMMAND_CANCELED, "TBS_E_COMMAND_CANCELED - The command was canceled"},
+    {TBS_E_BUFFER_TOO_LARGE, "TBS_E_BUFFER_TOO_LARGE - The input or output buffer is too large"},
+    {TBS_E_TPM_NOT_FOUND, "TBS_E_TPM_NOT_FOUND - A compatible Trusted Platform Module (TPM) Security Device cannot be found on this computer"},
+    {TBS_E_SERVICE_DISABLED, "TBS_E_SERVICE_DISABLED - The TBS service has been disabled"},
+    {TBS_E_NO_EVENT_LOG, "TBS_E_NO_EVENT_LOG - The TBS event log is not available"},
+    {TBS_E_ACCESS_DENIED, "TBS_E_ACCESS_DENIED - The caller does not have the appropriate rights to perform the requested operation"},
+    {TBS_E_PROVISIONING_NOT_ALLOWED, "TBS_E_PROVISIONING_NOT_ALLOWED - The TPM provisioning action is not allowed by the specified flags"},
+    {TBS_E_PPI_FUNCTION_UNSUPPORTED, "TBS_E_PPI_FUNCTION_UNSUPPORTED - The Physical Presence Interface of this firmware does not support the requested method"},
+    {TBS_E_OWNERAUTH_NOT_FOUND, "TBS_E_OWNERAUTH_NOT_FOUND - The requested TPM OwnerAuth value was not found"},
+    {TBS_E_PROVISIONING_INCOMPLETE, "TBS_E_PROVISIONING_INCOMPLETE - The TPM provisioning did not complete."},
+    
+    {TPM_E_COMMAND_BLOCKED, "TPM_E_COMMAND_BLOCKED - The command was blocked"},
+    {TPM_E_INVALID_HANDLE, "TPM_E_INVALID_HANDLE - The specified handle was not found"},
+    {TPM_E_DUPLICATE_VHANDLE, "TPM_E_DUPLICATE_VHANDLE - The TPM returned a duplicate handle and the command needs to be resubmitted"},
+    {TPM_E_EMBEDDED_COMMAND_BLOCKED, "TPM_E_EMBEDDED_COMMAND_BLOCKED - The command within the transport was blocked"},
+    {TPM_E_EMBEDDED_COMMAND_UNSUPPORTED, "TPM_E_EMBEDDED_COMMAND_UNSUPPORTED - The command within the transport is not supported"},
+    {TPM_E_RETRY, "TPM_E_RETRY - The TPM is too busy to respond to the command immediately, but the command could be resubmitted at a later time"},
+    {TPM_E_NEEDS_SELFTEST, "TPM_E_NEEDS_SELFTEST - SelfTestFull has not been run"},
+    {TPM_E_DOING_SELFTEST, "TPM_E_DOING_SELFTEST - The TPM is currently executing a full selftest"},
+    {TPM_E_DEFEND_LOCK_RUNNING, "TPM_E_DEFEND_LOCK_RUNNING - The TPM is defending against dictionary attacks and is in a time-out period"},
+};
+
+#endif  /* TPM_WINDOWS_TBSI */
+#endif	/* TPM_WINDOWS */
 
 #define BITS1108	0xf00
 #define BITS1108SHIFT	8
@@ -395,6 +451,7 @@ const RC_TABLE tssTable [] = {
 #define BIT6		0x040
 
 #define TSSMASK		0x00ff0000	/* 23:16 */
+#define TBSMASK		0x80000000
 
 /* Test cases
 
@@ -421,6 +478,13 @@ void TSS_ResponseCode_toString(const char **msg, const char **submsg,  const cha
     if (rc == 0) {
 	*msg = "TPM_RC_SUCCESS";
     }
+#ifdef TPM_WINDOWS
+#ifdef TPM_WINDOWS_TBSI
+    else if ((rc & TBSMASK) == TBSMASK) {
+	*msg = TSS_ResponseCode_RcToText(tbsTable, sizeof(tbsTable) / sizeof(RC_TABLE), rc);
+    }
+#endif  /* TPM_WINDOWS_TBSI */
+#endif	/* TPM_WINDOWS */
     /* if TSS 11 << 16 */
     else if ((rc & TSSMASK) == TSS_ERROR_LEVEL) {
 	*msg = TSS_ResponseCode_RcToText(tssTable, sizeof(tssTable) / sizeof(RC_TABLE), rc);
@@ -520,3 +584,4 @@ static const char *TSS_ResponseCode_NumberToText(unsigned int num)
     }
 }
 
+#endif 	/* TPM_TSS_NO_PRINT */

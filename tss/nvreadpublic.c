@@ -3,9 +3,8 @@
 /*			    NV ReadPublic					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: nvreadpublic.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -57,11 +56,12 @@
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
 #include <ibmtss/tssresponsecode.h>
+#include <ibmtss/tssmarshal.h>
 #include <ibmtss/tsscrypto.h>
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -73,6 +73,8 @@ int main(int argc, char *argv[])
     TPMI_RH_NV_INDEX		nvIndex = 0;
     TPMI_ALG_HASH		nalg = TPM_ALG_NULL;
     TPMI_ALG_HASH 		nameHashAlg;
+    const char			*nvPublicFilename = NULL;
+    const char			*nameFilename = NULL;
     int				noSpace = FALSE;
     TPMI_SH_AUTH_SESSION    	sessionHandle0 = TPM_RH_NULL;
     unsigned int		sessionAttributes0 = 0;
@@ -83,7 +85,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-ha") == 0) {
 	    i++;
@@ -120,8 +123,28 @@ int main(int argc, char *argv[])
 		printUsage();
 	    }
 	}
+	else if (strcmp(argv[i],"-opu") == 0) {
+	    i++;
+	    if (i < argc) {
+		nvPublicFilename = argv[i];
+	    }
+	    else {
+		printf("-opu option needs a value\n");
+		printUsage();
+	    }
+	}
 	else if (strcmp(argv[i],"-ns") == 0) {
 	    noSpace = TRUE;
+	}
+	else if (strcmp(argv[i],"-on") == 0) {
+	    i++;
+	    if (i < argc) {
+		nameFilename = argv[i];
+	    }
+	    else {
+		printf("-on option needs a value\n");
+		printUsage();
+	    }
 	}
 	else if (strcmp(argv[i],"-se0") == 0) {
 	    i++;
@@ -193,7 +216,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -262,6 +285,18 @@ int main(int argc, char *argv[])
 	    rc = TSS_RC_MALFORMED_NV_PUBLIC;
 	}
     }
+    /* save the public key */
+    if ((rc == 0) && (nvPublicFilename != NULL)) {
+	rc = TSS_File_WriteStructure(&out.nvPublic,
+				     (MarshalFunction_t)TSS_TPM2B_NV_PUBLIC_Marshalu,
+				     nvPublicFilename);
+    }
+    /* save the Name */
+    if ((rc == 0) && (nameFilename != NULL)) {
+	rc = TSS_File_WriteBinaryFile(out.nvName.b.buffer,
+				      out.nvName.b.size,
+				      nameFilename);
+    }
     if (rc == 0) {
 	printf("nvreadpublic: name algorithm %04x\n", out.nvPublic.nvPublic.nameAlg);
 	printf("nvreadpublic: data size %u\n", out.nvPublic.nvPublic.dataSize);
@@ -279,7 +314,7 @@ int main(int argc, char *argv[])
 	    }
 	    printf("\n");
 	}
-	if (verbose) printf("nvreadpublic: success\n");
+	if (tssUtilsVerbose) printf("nvreadpublic: success\n");
     }
     else {
 	const char *msg;
@@ -303,7 +338,9 @@ static void printUsage(void)
     printf("\t-ha\tNV index handle\n");
     printf("\t[-nalg\texpected name hash algorithm (sha1, sha256, sha384 sha512)\n"
 	   "\t\t(default no check)]\n");
+    printf("\t[-opu\tNV public file name (default do not save)]\n");
     printf("\t[-ns\tadditionally print Name in hex ascii on one line]\n");
+    printf("\t[-on\tbinary format Name file name]\n");
     printf("\t\tUseful to paste into policy\n");
     printf("\n");
     printf("\t-se[0-2] session handle / attributes (default NULL)\n");

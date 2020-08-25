@@ -3,9 +3,8 @@
 /*			   RSA_Decrypt						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: rsadecrypt.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018					*/
+/* (c) Copyright IBM Corporation 2015 - 2020					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -53,13 +52,16 @@
 #include <ibmtss/tsscryptoh.h>
 
 static void printRsaDecrypt(RSA_Decrypt_Out *out);
+static TPM_RC getKeySize(TSS_CONTEXT 		*tssContext,
+			 TPMI_RSA_KEY_BITS	*keyBits,
+			 TPMI_DH_PCR		objectHandle);
 static TPM_RC padData(uint8_t 		**buffer,
 		      size_t		*padLength,
 		      TPMI_ALG_HASH 	halg,
 		      TPMI_RSA_KEY_BITS	keyBits);
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -69,9 +71,14 @@ int main(int argc, char *argv[])
     RSA_Decrypt_In 		in;
     RSA_Decrypt_Out 		out;
     TPMI_DH_OBJECT		keyHandle = 0;
+    TPMI_RSA_KEY_BITS		keyBits;
     const char			*encryptFilename = NULL;
     const char			*decryptFilename = NULL;
     const char			*keyPassword = NULL;
+    const char			*keyPasswordFilename = NULL;
+    uint8_t			*keyPasswordBuffer = NULL;
+    size_t 			keyPasswordBufferLength = 0;
+    const char			*keyPasswordPtr = NULL;
     TPMI_ALG_HASH 		halg = TPM_ALG_NULL;
     TPMI_SH_AUTH_SESSION    	sessionHandle0 = TPM_RS_PW;
     unsigned int		sessionAttributes0 = 0;
@@ -86,7 +93,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hk") == 0) {
@@ -106,6 +114,16 @@ int main(int argc, char *argv[])
 	    }
 	    else {
 		printf("-pwdk option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i],"-ipwdk") == 0) {
+	    i++;
+	    if (i < argc) {
+		keyPasswordFilename = argv[i];
+	    }
+	    else {
+		printf("-ipwdk option needs a value\n");
 		printUsage();
 	    }
 	}
@@ -224,7 +242,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -240,13 +258,42 @@ int main(int argc, char *argv[])
 	printf("Missing encrypted message -ie\n");
 	printUsage();
     }
+    if ((keyPassword != NULL) && (keyPasswordFilename != NULL)) {
+	printf("Only one of -pwdk and -ipwdk can be specified\n");
+	printUsage();
+    }
     if (rc == 0) {
-	rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	/* use passsword from command line */
+	if (keyPassword != NULL) {
+	    keyPasswordPtr = keyPassword;
+	}
+	/* use password from file */
+	else if (keyPasswordFilename != NULL) {
+	    rc = TSS_File_ReadBinaryFile(&keyPasswordBuffer,     /* freed @2 */
+					 &keyPasswordBufferLength,
+					 keyPasswordFilename);
+	    keyPasswordPtr = (const char *)keyPasswordBuffer;
+	}
+	/* empty password */
+	else {
+	    keyPasswordPtr = NULL;
+	}
+    }
+    /* Start a TSS context */
+    if (rc == 0) {
+	rc = TSS_Create(&tssContext);
+    }
+    /* get the public modulus size for checks and padding */
+    if (rc == 0) {
+	rc = getKeySize(tssContext, &keyBits, keyHandle);
+    }
+    if (rc == 0) {
+	rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 				     &length,
 				     encryptFilename);
     }
     if (rc == 0) {
-	if (length > 256) {
+	if (length > (keyBits / 8U)) {
 	    printf("Input data too long %u\n", (unsigned int)length);
 	    rc = TSS_RC_INSUFFICIENT_BUFFER;
 	}
@@ -255,9 +302,8 @@ int main(int argc, char *argv[])
     if ((rc == 0) && (halg != TPM_ALG_NULL)) {
 	rc = padData(&buffer,		/* realloced to fit */
 		     &length,		/* resized for OID and pad */
-		     halg,
-		     2048);		/* hard coded RSA-2048 */
-	/* FIXME use readpublic and get bit size or maybe byte size */
+		     halg,		/* gigest algorithm for size and OID */
+		     keyBits);		/* RSA modulus length in bits */
     }
     if (rc == 0) {
 	/* Handle of key that will perform rsa decrypt */
@@ -279,13 +325,9 @@ int main(int argc, char *argv[])
 	    in.label.t.size = 0;
 	}
     }
-    free (buffer);
+    free(buffer);		/* @1 */
     buffer = NULL;
 
-    /* Start a TSS context */
-    if (rc == 0) {
-	rc = TSS_Create(&tssContext);
-    }
     /* call TSS to execute the command */
     if (rc == 0) {
 	rc = TSS_Execute(tssContext,
@@ -293,7 +335,7 @@ int main(int argc, char *argv[])
 			 (COMMAND_PARAMETERS *)&in,
 			 NULL,
 			 TPM_CC_RSA_Decrypt,
-			 sessionHandle0, keyPassword, sessionAttributes0,
+			 sessionHandle0, keyPasswordPtr, sessionAttributes0,
 			 sessionHandle1, NULL, sessionAttributes1,
 			 sessionHandle2, NULL, sessionAttributes2,
 			 TPM_RH_NULL, NULL, 0);
@@ -308,7 +350,7 @@ int main(int argc, char *argv[])
 	rc = TSS_Structure_Marshal(&buffer,	/* freed @1 */
 				   &written,
 				   &out.message,
-				   (MarshalFunction_t)TSS_TPM2B_PUBLIC_KEY_RSA_Marshal);
+				   (MarshalFunction_t)TSS_TPM2B_PUBLIC_KEY_RSA_Marshalu);
     }
     if ((rc == 0) && (decryptFilename != NULL)) {
 	rc = TSS_File_WriteBinaryFile(buffer + sizeof(uint16_t),
@@ -316,8 +358,8 @@ int main(int argc, char *argv[])
 				      decryptFilename); 
     }    
     if (rc == 0) {
-	if (verbose) printRsaDecrypt(&out);
-	if (verbose) printf("rsadecrypt: success\n");
+	if (tssUtilsVerbose) printRsaDecrypt(&out);
+	if (tssUtilsVerbose) printf("rsadecrypt: success\n");
     }
     else {
 	const char *msg;
@@ -328,9 +370,17 @@ int main(int argc, char *argv[])
 	printf("%s%s%s\n", msg, submsg, num);
 	rc = EXIT_FAILURE;
     }
-    free(buffer);	/* @1 */
+    free(buffer);		/* @1 */
+    free(keyPasswordBuffer);	/* @2 */
     return rc;
 }
+
+/* padData() is used then the private key operation is a signing operation over a hash.  It takes a
+   'buffer' of original 'length'.  The original length should match the hash algorithm digest size.
+
+   buffer is realloc'ed to the key size, than then padded with the OID for the hash algorithm and
+   the PKCS1 padding.
+*/
 
 static TPM_RC padData(uint8_t 			**buffer,
 		      size_t			*padLength,
@@ -401,7 +451,34 @@ static TPM_RC padData(uint8_t 			**buffer,
 	(*buffer)[1] = 0x01;
 	memset(&(*buffer)[2], 0xff, *padLength - 3 - oidSize - digestSize);
 	(*buffer)[*padLength - oidSize - digestSize - 1] = 0x00;
-	if (verbose) TSS_PrintAll("padData: padded data", *buffer, *padLength);
+	if (tssUtilsVerbose) TSS_PrintAll("padData: padded data", *buffer, *padLength);
+    }
+    return rc;
+}
+
+/* getKeySize() gets the key size in bits */
+
+static TPM_RC getKeySize(TSS_CONTEXT 		*tssContext,
+			 TPMI_RSA_KEY_BITS	*keyBits,
+			 TPMI_DH_PCR		objectHandle)
+{
+    TPM_RC			rc = 0;
+    ReadPublic_In 		in;
+    ReadPublic_Out 		out;
+
+    /* call TSS to execute the command */
+    if (rc == 0) {
+	in.objectHandle = objectHandle;
+	rc = TSS_Execute(tssContext,
+			 (RESPONSE_PARAMETERS *)&out, 
+			 (COMMAND_PARAMETERS *)&in,
+			 NULL,
+			 TPM_CC_ReadPublic,
+			 TPM_RH_NULL, NULL, 0);
+    }
+    if (rc == 0) {
+	*keyBits = out.outPublic.publicArea.parameters.rsaDetail.keyBits;
+	if (tssUtilsVerbose) printf("getKeySize: size %u\n", *keyBits);
     }
     return rc;
 }
@@ -419,7 +496,8 @@ static void printUsage(void)
     printf("Runs TPM2_RSA_Decrypt\n");
     printf("\n");
     printf("\t-hk\tkey handle\n");
-    printf("\t-pwdk\tpassword for key (default empty)\n");
+    printf("\t[-pwdk\tpassword for key (default empty)[\n");
+    printf("\t[-ipwdk\tpassword file for key, nul terminated (default empty)]\n");
     printf("\t-ie\tencrypt file name\n");
     printf("\t-od\tdecrypt file name (default do not save)\n");
     printf("\t[-oid\t(sha1, sha256, sha384 sha512)]\n");

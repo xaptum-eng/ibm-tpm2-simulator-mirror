@@ -3,9 +3,8 @@
 /*			    Certify						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: certify.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -53,9 +52,8 @@
 #include <ibmtss/Unmarshal_fp.h>
 
 static void printUsage(void);
-static void printSignature(Certify_Out *out);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -72,7 +70,7 @@ int main(int argc, char *argv[])
     const char			*signatureFilename = NULL;
     const char			*attestInfoFilename = NULL;
     const char			*qualifyingDataFilename = NULL;
-    int				useRsa = 1;
+    TPM_ALG_ID			sigAlg = TPM_ALG_RSA;
     TPMS_ATTEST 		tpmsAttest;
     TPMI_SH_AUTH_SESSION    	sessionHandle0 = TPM_RS_PW;
     unsigned int		sessionAttributes0 = 0;
@@ -83,7 +81,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-ho") == 0) {
@@ -155,10 +154,13 @@ int main(int argc, char *argv[])
 	    i++;
 	    if (i < argc) {
 		if (strcmp(argv[i],"rsa") == 0) {
-		    useRsa = 1;
+		    sigAlg = TPM_ALG_RSA;
 		}
 		else if (strcmp(argv[i],"ecc") == 0) {
-		    useRsa = 0;
+		    sigAlg = TPM_ALG_ECDSA;
+		}
+		else if (strcmp(argv[i],"hmac") == 0) {
+		    sigAlg = TPM_ALG_HMAC;
 		}
 		else {
 		    printf("Bad parameter %s for -salg\n", argv[i]);
@@ -270,7 +272,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -290,7 +292,7 @@ int main(int argc, char *argv[])
 	/* Handle of key that will perform certifying */
 	in.objectHandle = objectHandle;
 	in.signHandle = signHandle;
-	if (useRsa) {
+	if (sigAlg == TPM_ALG_RSA) {
 	    /* Table 145 - Definition of TPMT_SIG_SCHEME Structure */
 	    in.inScheme.scheme = TPM_ALG_RSASSA;	
 	    /* Table 144 - Definition of TPMU_SIG_SCHEME Union <IN/OUT, S> */
@@ -298,9 +300,13 @@ int main(int argc, char *argv[])
 	    /* Table 135 - Definition of TPMS_SCHEME_HASH Structure */
 	    in.inScheme.details.rsassa.hashAlg = halg;
 	}
-	else {	/* ecc */
+	else if (sigAlg == TPM_ALG_ECDSA) {
 	    in.inScheme.scheme = TPM_ALG_ECDSA;	
 	    in.inScheme.details.ecdsa.hashAlg = halg;
+	}
+	else {	/* HMAC */
+	    in.inScheme.scheme = TPM_ALG_HMAC;	
+	    in.inScheme.details.hmac.hashAlg = halg;
 	}
     }
     /* data supplied by the caller */
@@ -340,7 +346,9 @@ int main(int argc, char *argv[])
 	uint8_t *tmpBuffer = out.certifyInfo.t.attestationData;
 	uint32_t tmpSize = out.certifyInfo.t.size;
 	rc = TSS_TPMS_ATTEST_Unmarshalu(&tpmsAttest, &tmpBuffer, &tmpSize);
-	if (verbose) TSS_TPMS_ATTEST_Print(&tpmsAttest, 0);
+    }
+    if (rc == 0) {
+	if (tssUtilsVerbose) TSS_TPMS_ATTEST_Print(&tpmsAttest, 0);
     }
     /* For an attestation command using the ECDAA scheme, both the qualifiedSigner and extraData
        fields in the attestation block (a TPMS_ATTEST) are set to be the Empty Buffer */
@@ -354,7 +362,7 @@ int main(int argc, char *argv[])
     }
     if ((rc == 0) && (signatureFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.signature,
-				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshal,
+				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshalu,
 				     signatureFilename);
     }
     if ((rc == 0) && (attestInfoFilename != NULL)) {
@@ -363,8 +371,8 @@ int main(int argc, char *argv[])
 				      attestInfoFilename);
     }
     if (rc == 0) {
-	if (verbose) printSignature(&out);
-	if (verbose) printf("certify: success\n");
+	if (tssUtilsVerbose) TSS_TPMT_SIGNATURE_Print(&out.signature, 0);
+	if (tssUtilsVerbose) printf("certify: success\n");
     }
     else {
 	const char *msg;
@@ -376,13 +384,6 @@ int main(int argc, char *argv[])
 	rc = EXIT_FAILURE;
     }
     return rc;
-}
-
-static void printSignature(Certify_Out *out)
-{
-    TSS_PrintAll("Signature",
-		 out->signature.signature.rsassa.sig.t.buffer,
-		 out->signature.signature.rsassa.sig.t.size);
 }
 
 static void printUsage(void)
@@ -397,7 +398,7 @@ static void printUsage(void)
     printf("\t-hk\tcertifying key handle\n");
     printf("\t[-pwdk\tpassword for key (default empty)]\n");
     printf("\t[-halg\t(sha1, sha256, sha384 sha512) (default sha256)]\n");
-    printf("\t[-salg\tsignature algorithm (rsa, ecc) (default rsa)]\n");
+    printf("\t[-salg\tsignature algorithm (rsa, ecc, hmac) (default rsa)]\n");
     printf("\t[-qd\tqualifying data file name]\n");
     printf("\t[-os\tsignature file name (default do not save)]\n");
     printf("\t[-oa\tattestation output file name (default do not save)]\n");

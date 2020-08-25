@@ -3,9 +3,8 @@
 /*			    TSS Configuration Properties			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tssproperties.c 1308 2018-08-21 16:55:56Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -52,6 +51,14 @@
 #include <ibmtss/tssprint.h>
 
 #include "tssproperties.h"
+
+/* For systems where there are no environment variables, GETENV returns NULL.  This simulates the
+   situation when an environment variable is not set, causing the compiled in default to be used. */
+#ifndef TPM_TSS_NOENV
+#define GETENV(x) getenv(x)
+#else
+#define GETENV(x) NULL
+#endif
 
 /* local prototypes */
 
@@ -103,7 +110,11 @@ int tssFirstCall = TRUE;
 #endif
 
 #ifndef TPM_INTERFACE_TYPE_DEFAULT
+#ifndef TPM_NOSOCKET
 #define TPM_INTERFACE_TYPE_DEFAULT	"socsim"	/* default to MS simulator interface */
+#else
+#define TPM_INTERFACE_TYPE_DEFAULT	"dev"		/* if no sockets, default to device driver */
+#endif
 #endif
 
 #ifndef TPM_DEVICE_DEFAULT
@@ -129,7 +140,7 @@ TPM_RC TSS_GlobalProperties_Init(void)
 
     /* trace level is global, tssContext can be null */
     if (rc == 0) {
-	value = getenv("TPM_TRACE_LEVEL");
+	value = GETENV("TPM_TRACE_LEVEL");
 	rc = TSS_SetTraceLevel(value);
     }
     return rc;
@@ -156,15 +167,19 @@ TPM_RC TSS_Properties_Init(TSS_CONTEXT *tssContext)
 #ifndef TPM_NOSOCKET
 	tssContext->sock_fd = -1;
 #endif 	/* TPM_NOSOCKET */
-#endif
 	tssContext->dev_fd = -1;
-#ifdef TPM_WINDOWS
-#ifdef TPM_WINDOWS_TBSI
-#endif
-#endif
+#endif	/* TPM_POSIX */
+
+#ifdef TPM_SKIBOOT
+	tssContext->tpm_driver = NULL;
+	tssContext->tpm_device = NULL;
+#endif /* TPM_SKIBOOT */
+	
 #ifndef TPM_TSS_NOCRYPTO
+#ifndef TPM_TSS_NOFILE
 	tssContext->tssSessionEncKey = NULL;
 	tssContext->tssSessionDecKey = NULL;
+#endif
 #endif
     }
     /* for a minimal TSS with no file support */
@@ -186,42 +201,42 @@ TPM_RC TSS_Properties_Init(TSS_CONTEXT *tssContext)
 #endif
     /* data directory */
     if (rc == 0) {
-	value = getenv("TPM_DATA_DIR");
+	value = GETENV("TPM_DATA_DIR");
 	rc = TSS_SetDataDirectory(tssContext, value);
     }
     /* flag whether session state should be encrypted */
     if (rc == 0) {
-	value = getenv("TPM_ENCRYPT_SESSIONS");
+	value = GETENV("TPM_ENCRYPT_SESSIONS");
 	rc = TSS_SetEncryptSessions(tssContext, value);
     }
     /* TPM socket command port */
     if (rc == 0) {
-	value = getenv("TPM_COMMAND_PORT");
+	value = GETENV("TPM_COMMAND_PORT");
 	rc = TSS_SetCommandPort(tssContext, value);
     }
     /* TPM simulator socket platform port */
     if (rc == 0) {
-	value = getenv("TPM_PLATFORM_PORT");
+	value = GETENV("TPM_PLATFORM_PORT");
 	rc = TSS_SetPlatformPort(tssContext, value);
     }
     /* TPM socket host name */
     if (rc == 0) {
-	value = getenv("TPM_SERVER_NAME");
+	value = GETENV("TPM_SERVER_NAME");
 	rc = TSS_SetServerName(tssContext, value);
     }
     /* TPM socket server type */
     if (rc == 0) {
-	value = getenv("TPM_SERVER_TYPE");
+	value = GETENV("TPM_SERVER_TYPE");
 	rc = TSS_SetServerType(tssContext, value);
     }
     /* TPM interface type */
     if (rc == 0) {
-	value = getenv("TPM_INTERFACE_TYPE");
+	value = GETENV("TPM_INTERFACE_TYPE");
 	rc = TSS_SetInterfaceType(tssContext, value);
     }
     /* TPM device within the interface type */
     if (rc == 0) {
-	value = getenv("TPM_DEVICE");
+	value = GETENV("TPM_DEVICE");
 	rc = TSS_SetDevice(tssContext, value);
     }
     return rc;
@@ -299,7 +314,7 @@ TPM_RC TSS_SetProperty(TSS_CONTEXT *tssContext,
 static TPM_RC TSS_SetTraceLevel(const char *value)
 {
     TPM_RC		rc = 0;
-    int			irc;
+    int			irc = 0;
     int 		level;
 
     if (rc == 0) {
@@ -307,6 +322,7 @@ static TPM_RC TSS_SetTraceLevel(const char *value)
 	    value = TPM_TRACE_LEVEL_DEFAULT;
 	}
     }
+#if !defined(__ULTRAVISOR__) && !defined(TPM_SKIBOOT)
     if (rc == 0) {
 	irc = sscanf(value, "%u", &level);
 	if (irc != 1) {
@@ -314,6 +330,11 @@ static TPM_RC TSS_SetTraceLevel(const char *value)
 	    rc = TSS_RC_BAD_PROPERTY_VALUE;
 	}
     }
+    /* disable tracing within the ultravisor and skiboot, which doesn't implement sscanf() anyway */
+#else
+    irc = irc;
+    level = 0;
+#endif
     if (rc == 0) {
 	switch (level) {
 	  case 0:
@@ -356,8 +377,8 @@ static TPM_RC TSS_SetDataDirectory(TSS_CONTEXT *tssContext, const char *value)
 
 static TPM_RC TSS_SetCommandPort(TSS_CONTEXT *tssContext, const char *value)
 {
-    int			irc;
     TPM_RC		rc = 0;
+    int			irc = 0;
 
     /* close an open connection before changing property */
     if (rc == 0) {
@@ -368,6 +389,7 @@ static TPM_RC TSS_SetCommandPort(TSS_CONTEXT *tssContext, const char *value)
 	    value = TPM_COMMAND_PORT_DEFAULT;
 	}
     }
+#ifndef TPM_NOSOCKET
     if (rc == 0) {
 	irc = sscanf(value, "%hu", &tssContext->tssCommandPort);
 	if (irc != 1) {
@@ -375,13 +397,17 @@ static TPM_RC TSS_SetCommandPort(TSS_CONTEXT *tssContext, const char *value)
 	    rc = TSS_RC_BAD_PROPERTY_VALUE;
 	}
     }
+#else
+    tssContext->tssCommandPort = 0;
+    irc = irc;
+#endif /* TPM_NOSOCKET */
     return rc;
 }
 
 static TPM_RC TSS_SetPlatformPort(TSS_CONTEXT *tssContext, const char *value)
 {
     TPM_RC		rc = 0;
-    int			irc;
+    int			irc = 0;
 
     /* close an open connection before changing property */
     if (rc == 0) {
@@ -392,13 +418,18 @@ static TPM_RC TSS_SetPlatformPort(TSS_CONTEXT *tssContext, const char *value)
 	    value = TPM_PLATFORM_PORT_DEFAULT;
 	}
     }
-    if (rc == 0) {
+#ifndef TPM_NOSOCKET
+   if (rc == 0) {
 	irc = sscanf(value, "%hu", &tssContext->tssPlatformPort);
 	if (irc != 1) {
 	    if (tssVerbose) printf("TSS_SetPlatformPort: Error, , value invalid\n");
 	    rc = TSS_RC_BAD_PROPERTY_VALUE;
 	}
     }
+#else
+   tssContext->tssPlatformPort = 0;
+    irc = irc;
+#endif /* TPM_NOSOCKET */
     return rc;
 }
 
@@ -481,19 +512,24 @@ static TPM_RC TSS_SetDevice(TSS_CONTEXT *tssContext, const char *value)
 static TPM_RC TSS_SetEncryptSessions(TSS_CONTEXT *tssContext, const char *value)
 {
     TPM_RC		rc = 0;
-    int			irc;
+    int			irc = 0;
 
     if (rc == 0) {
 	if (value == NULL) {
 	    value = TPM_ENCRYPT_SESSIONS_DEFAULT;
 	}
     }
-    if (rc == 0) {
+#ifndef TPM_TSS_NOFILE
+   if (rc == 0) {
 	irc = sscanf(value, "%u", &tssContext->tssEncryptSessions);
 	if (irc != 1) {
 	    if (tssVerbose) printf("TSS_SetEncryptSessions: Error, value invalid\n");
 	    rc = TSS_RC_BAD_PROPERTY_VALUE;
 	}
     }
-    return rc;
+#else
+   tssContext->tssEncryptSessions = TRUE;
+   irc = irc;
+#endif /* TPM_TSS_NOFILE */
+   return rc;
 }

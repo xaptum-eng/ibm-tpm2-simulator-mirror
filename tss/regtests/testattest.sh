@@ -6,9 +6,8 @@
 #			TPM2 regression test					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	$Id: testattest.sh 1303 2018-08-20 16:49:52Z kgoldman $			#
 #										#
-# (c) Copyright IBM Corporation 2015 - 2018					#
+# (c) Copyright IBM Corporation 2015 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -50,11 +49,11 @@ echo ""
 # 80000002 ECC signing key
 
 echo "Load the RSA signing key under the primary key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Load the ECC signing key under the primary key"
-${PREFIX}load -hp 80000000 -ipr signeccpriv.bin -ipu signeccpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signeccnistp256priv.bin -ipu signeccnistp256pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "NV Define Space"
@@ -119,6 +118,10 @@ do
 	    ${PREFIX}verifysignature -hk ${HANDLE} -halg ${HALG} -if tmp.bin -is sig.bin > run.out
 	    checkSuccess $?
 
+	    echo "Set command audit digest ${HALG}"
+	    ${PREFIX}setcommandcodeauditstatus -hi p -halg null -clr 00000144 > run.out
+	    checkSuccess $?
+
 	    echo "Get command audit digest ${HALG} ${SALG} ${SESS}"
 	    ${PREFIX}getcommandauditdigest -hk ${HANDLE} -halg ${HALG} ${SESS} -pwdk sig -os sig.bin -oa tmp.bin -qd policies/aaa -salg ${SALG} > run.out
 	    checkSuccess $?
@@ -139,12 +142,97 @@ echo "Flush the ECC attestation key"
 ${PREFIX}flushcontext -ha 80000002 > run.out
 checkSuccess $?
 
-echo "NV Undefine Space"
-${PREFIX}nvundefinespace -hi o -ha 01000000 > run.out
-checkSuccess $?
-
 echo "Flush the auth session"
 ${PREFIX}flushcontext -ha 02000000 > run.out
+checkSuccess $?
+
+echo ""
+echo "Attestation with an HMAC key"
+echo ""
+
+echo "Generate an HMAC key"
+${PREFIX}getrandom -by 32 -of tmphkey.bin -ns > run.out
+checkSuccess $?
+
+for HALG in ${ITERATE_ALGS}
+do
+
+    echo "Create a ${HALG} HMAC key ${HMACKEY}"
+    ${PREFIX}create -hp 80000000 -pwdp sto -kh -halg ${HALG} -if tmphkey.bin -opu tmppub.bin -opr tmppriv.bin > run.out
+    checkSuccess $?
+
+    echo "Load the ${HALG} HMAC key"
+    ${PREFIX}load -hp 80000000 -pwdp sto -ipu tmppub.bin -ipr tmppriv.bin > run.out
+    checkSuccess $?
+
+    echo "Signing Key Self Certify with an HMAC key ${HALG}"
+    ${PREFIX}certify -hk 80000001 -ho 80000001 -halg ${HALG} -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using TPM"
+    ${PREFIX}verifysignature -hk 80000001 -halg ${HALG} -if tmp.bin -is sig.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using OpenSSL"
+    ${PREFIX}verifysignature -halg ${HALG} -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    checkSuccess $?
+
+    echo "Quote with an HMAC key ${HALG}"
+    ${PREFIX}quote -hp 0 -hk 80000001 -halg ${HALG} -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using TPM"
+    ${PREFIX}verifysignature -hk 80000001 -halg ${HALG} -if tmp.bin -is sig.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using OpenSSL"
+    ${PREFIX}verifysignature -halg ${HALG} -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    checkSuccess $?
+
+    echo "Gettime signed with an HMAC key ${HALG}"
+    ${PREFIX}gettime -hk 80000001 -halg ${HALG} -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using TPM"
+    ${PREFIX}verifysignature -hk 80000001 -halg ${HALG} -if tmp.bin -is sig.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using OpenSSL"
+    ${PREFIX}verifysignature -halg ${HALG} -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    checkSuccess $?
+
+    echo "NV Certify with an HMAC key ${HALG}"
+    ${PREFIX}nvcertify -ha 01000000 -pwdn nnn -hk 80000001 -halg ${HALG} -salg hmac -sz 16 -os sig.bin -oa tmp.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using TPM"
+    ${PREFIX}verifysignature -hk 80000001 -halg ${HALG} -if tmp.bin -is sig.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using OpenSSL"
+    ${PREFIX}verifysignature -halg ${HALG} -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    checkSuccess $?
+
+    echo "Get command audit digest with an HMAC key ${HALG}"
+    ${PREFIX}getcommandauditdigest -hk 80000001 -halg ${HALG} -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using TPM"
+    ${PREFIX}verifysignature -hk 80000001 -halg ${HALG} -if tmp.bin -is sig.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the signature ${HALG} using OpenSSL"
+    ${PREFIX}verifysignature -halg ${HALG} -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    checkSuccess $?
+
+    echo "Flush the ${HALG} HMAC key"
+    ${PREFIX}flushcontext -ha 80000001 > run.out
+    checkSuccess $?
+
+done
+
+echo "NV Undefine Space"
+${PREFIX}nvundefinespace -hi o -ha 01000000 > run.out
 checkSuccess $?
 
 echo ""
@@ -159,7 +247,7 @@ echo "Audit with one session"
 echo ""
 
 echo "Load the audit signing key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 for BIND in "" "-bi 80000001 -pwdb sig"
@@ -172,11 +260,11 @@ do
 	checkSuccess $?
 
 	echo "Sign a digest ${HALG}"
-	${PREFIX}sign -hk 80000001 -halg ${HALG} -if policies/aaa -os sig.bin -pwdk sig -ipu signpub.bin -se0 02000000 81 > run.out
+	${PREFIX}sign -hk 80000001 -halg ${HALG} -if policies/aaa -os sig.bin -pwdk sig -ipu signrsa2048pub.bin -se0 02000000 81 > run.out
 	checkSuccess $?
 
 	echo "Sign a digest ${HALG}"
-	${PREFIX}sign -hk 80000001 -halg ${HALG} -if policies/aaa -os sig.bin -pwdk sig -se0 02000000 81 -ipu signpub.bin > run.out
+	${PREFIX}sign -hk 80000001 -halg ${HALG} -if policies/aaa -os sig.bin -pwdk sig -se0 02000000 81 -ipu signrsa2048pub.bin > run.out
 	checkWarning $? "Interaction between bind and audit session response HMAC may not be fixed"
 
 	echo "Get Session Audit Digest ${HALG}"
@@ -207,7 +295,7 @@ echo "Audit with HMAC and audit sessions"
 echo ""
 
 echo "Load the audit signing key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Start an HMAC auth session"
@@ -225,7 +313,7 @@ do
 	checkSuccess $?
 
 	echo "Sign a digest ${HALG}"
-	${PREFIX}sign -hk 80000001 -halg $HALG -if policies/aaa -os sig.bin -pwdk sig -ipu signpub.bin -se0 02000001 81 > run.out
+	${PREFIX}sign -hk 80000001 -halg $HALG -if policies/aaa -os sig.bin -pwdk sig -ipu signrsa2048pub.bin -se0 02000001 81 > run.out
 	checkSuccess $?
 
 	echo "Get Session Audit Digest ${SESS}"
@@ -256,7 +344,7 @@ echo "Certify Creation"
 echo ""
 
 echo "Load the RSA signing key under the primary key"
-${PREFIX}load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Certify the creation data for the primary key 80000000"
@@ -268,11 +356,11 @@ ${PREFIX}verifysignature -hk 80000001 -if tmp.bin -is sig.bin > run.out
 checkSuccess $?
 
 echo "Load the RSA storage key under the primary key"
-${PREFIX}load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+${PREFIX}load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 checkSuccess $?
 
 echo "Certify the creation data for the storage key 80000002"
-${PREFIX}certifycreation -ho 80000002 -hk 80000001 -pwdk sig -tk stotk.bin -ch stoch.bin -os sig.bin -oa tmp.bin > run.out
+${PREFIX}certifycreation -ho 80000002 -hk 80000001 -pwdk sig -tk storersa2048tk.bin -ch storersa2048ch.bin -os sig.bin -oa tmp.bin > run.out
 checkSuccess $?
 
 echo "Verify the signature"
@@ -346,6 +434,7 @@ rm -f tmpdigestr.bin
 rm -f tmpdigestg.bin
 rm -f sig.bin
 rm -f tmp.bin
+rm -f tmphkey.bin
 
 exit ${WARN}
 

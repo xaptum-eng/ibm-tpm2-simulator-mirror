@@ -3,9 +3,8 @@
 /*			    NV Read		 				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: nvread.c 1300 2018-08-14 13:24:40Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -50,11 +49,12 @@
 #include <ibmtss/tsscryptoh.h>
 #include <ibmtss/tssutils.h>
 #include <ibmtss/tssresponsecode.h>
+#include <ibmtss/Unmarshal_fp.h>
 #include "ekutils.h"
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -65,12 +65,18 @@ int main(int argc, char *argv[])
     NV_Read_Out			out;
     uint16_t 			offset = 0;			/* default 0 */
     uint16_t 			readLength = 0;			/* bytes to read */
+    int 			ireadLength = 0;		/* bytes to read as integer */
     int 			cert = FALSE;			/* boolean, read certificate */
+    const char			*certificateFilename = NULL;
     int				readLengthSet = FALSE;
     char 			hierarchyAuthChar = 0;
     const char 			*datafilename = NULL;
     TPMI_RH_NV_INDEX		nvIndex = 0;
     const char			*nvPassword = NULL; 		/* default no password */
+    uint32_t 			pinCount = 0;	/* these two initialized to suppress falose gcc -O3
+						   warnings */
+    uint32_t 			pinLimit = 0;
+    int				inData = FALSE;
     TPMI_SH_AUTH_SESSION    	sessionHandle0 = TPM_RS_PW;
     unsigned int		sessionAttributes0 = 0;
     TPMI_SH_AUTH_SESSION    	sessionHandle1 = TPM_RH_NULL;
@@ -84,7 +90,8 @@ int main(int argc, char *argv[])
    
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-pwdn") == 0) {
 	    i++;
@@ -138,16 +145,52 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[i],"-sz") == 0) {
 	    i++;
 	    if (i < argc) {
-		readLength = atoi(argv[i]);
+		ireadLength = atoi(argv[i]);
 		readLengthSet  = TRUE;
 	    }
 	    else {
 		printf("-sz option needs a value\n");
 		printUsage();
 	    }
+	    if ((ireadLength >= 0) && (ireadLength <= 0xffff)) {
+		readLength = (uint16_t)ireadLength;
+	    }
+	    else {
+		printf("-sz %d out of range\n", ireadLength);
+		printUsage();
+	    }
 	}
 	else if (!strcmp("-cert",argv[i])) {
 	    cert = TRUE;
+	}
+	else if (strcmp(argv[i],"-ocert") == 0) {
+	    i++;
+	    if (i < argc) {
+		certificateFilename = argv[i];
+	    }
+	    else {
+		printf("-ocert option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i], "-id")  == 0) {
+	    i++;
+	    if (i < argc) {
+		pinCount = atoi(argv[i]);
+		i++;
+		if (i < argc) {
+		    pinLimit = atoi(argv[i]);
+		    inData = TRUE;
+		}
+		else {
+		    printf("-id option needs two values\n");
+		    printUsage();
+		}
+	    }
+	    else {
+		printf("-id option needs two values\n");
+		printUsage();
+	    }
 	}
 	else if (strcmp(argv[i],"-se0") == 0) {
 	    i++;
@@ -219,7 +262,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -297,6 +340,12 @@ int main(int argc, char *argv[])
 	    readBuffer = NULL;
 	}
     }
+    if ((rc == 0) && inData) {
+	if (readLength != 8) {
+	    printf("-id needs read length 8, is %u\n", readLength);
+	    exit(1);	
+	}
+    }
     /* data may have to be read in chunks.  Read the TPM_PT_NV_BUFFER_MAX, the chunk size */
     if (rc == 0) {
 	rc = readNvBufferMax(tssContext,
@@ -320,7 +369,7 @@ int main(int argc, char *argv[])
 	    }
 	}
 	if (rc == 0) {
-	    if (verbose) printf("nvread: reading %u bytes\n", in.size);
+	    if (tssUtilsVerbose) printf("nvread: reading %u bytes\n", in.size);
 	    rc = TSS_Execute(tssContext,
 			     (RESPONSE_PARAMETERS *)&out,
 			     (COMMAND_PARAMETERS *)&in,
@@ -352,28 +401,49 @@ int main(int argc, char *argv[])
 	rc = TSS_File_WriteBinaryFile(readBuffer, readLength, datafilename);
     }
     if (rc == 0) {
+	/* if not tracing the certificate, trace the result */
 	if (!cert) {
-	    if (verbose) printf("nvread: success\n");
+	    if (tssUtilsVerbose) printf("nvread: success\n");
 	    TSS_PrintAll("nvread: data", readBuffer, readLength);
 	}
-	else {
-	    X509 		*x509Certificate = NULL;
-	    const uint8_t 	*tmpData = readBuffer;
-	    x509Certificate = d2i_X509(NULL,	/* freed @2 */
-				       (const unsigned char **)&tmpData, readLength);
-	    if (x509Certificate == NULL) {
-		printf("nvread: Could not parse X509 certificate\n");
-		rc = TSS_RC_X509_ERROR;
+	if (cert || (certificateFilename != NULL)) {
+	    void *x509Certificate = NULL;	/* opaque structure */
+	    /* convert the DER stream to crypto library structure */
+	    rc = convertDerToX509(&x509Certificate,	/* freed @2 */
+				  readLength,
+				  readBuffer);
+	    /* if cert, trace the certificate using openssl print function */
+	    if ((rc == 0) && cert) {
+		x509PrintStructure(x509Certificate);
 	    }
-	    if (rc == 0) {
-		X509_print_fp(stdout, x509Certificate);
+	    /* if a file name was specified, write the certificate in PEM format */
+	    if ((rc == 0) && (certificateFilename != NULL)) {
+		rc = convertX509ToPem(certificateFilename,
+				      x509Certificate);
 	    }
-	    if (x509Certificate != NULL) {
-		X509_free(x509Certificate);   	/* @2 */
+	    x509FreeStructure(x509Certificate);   	/* @2 */
+	}
+    }
+    /* PIN index regression test aid, compare expected to actual */
+    if (rc == 0) {
+	if (inData) {
+	    uint32_t tmpSize = 8;		/* readLength was checked previously */
+	    uint8_t *tmpBuffer = readBuffer;
+	    uint32_t actual;		/* data comes off TPM big endian (nbo) */
+
+	    TSS_UINT32_Unmarshalu(&actual, &tmpBuffer, &tmpSize);
+	    if (pinCount != actual) {
+		printf("Error: Expected pinCount %u Actual %u\n", pinCount, actual);
+		rc = TSS_RC_BAD_READ_VALUE;
+	    }
+	    TSS_UINT32_Unmarshalu(&actual, &tmpBuffer, &tmpSize);
+	    if (pinLimit != actual) {
+		printf("Error: Expected pinLimit %u Actual %u\n", pinLimit, actual);
+		rc = TSS_RC_BAD_READ_VALUE;
 	    }
 	}
     }
-    else {
+    if (rc != 0) {
 	const char *msg;
 	const char *submsg;
 	const char *num;
@@ -397,10 +467,14 @@ static void printUsage(void)
     printf("\t-ha\tNV index handle\n");
     printf("\t[-pwdn\tpassword for NV index (default empty)]\n");
     printf("\t[-sz\tdata size (default to size of index)]\n");
-    printf("\t[-cert dumps the certificate, the number of bytes is embedded in the prefix]\n");
     printf("\t\tcounter, bits, pin read 8 bytes, extend reads based on hash algorithm\n");
-    printf("\t[-off\toffset (default 0)]\n");
-    printf("\t[-of\tdata file (default do not save)]\n");
+    printf("\t[-cert\tdumps the certificate\n");
+    printf("\t01c00002\tRSA EK certificate\n");
+    printf("\t01c0000a\tECC EK certificate\n");
+    printf("\t[-ocert\t certificate file name, writes in PEM format\n");
+    printf("\t[-off\t offset (default 0)]\n");
+    printf("\t[-of\t data file (default do not save)]\n");
+    printf("\t[-id\tdata values for pinCount and pinLimit verification, (4 bytes each)]\n");
     printf("\n");
     printf("\t-se[0-2] session handle / attributes (default PWAP)\n");
     printf("\t01\tcontinue\n");

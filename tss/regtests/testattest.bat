@@ -3,9 +3,8 @@ REM #										#
 REM #			TPM2 regression test					#
 REM #			     Written by Ken Goldman				#
 REM #		       IBM Thomas J. Watson Research Center			#
-REM #		$Id: testattest.bat 1306 2018-08-20 19:33:17Z kgoldman $	#
 REM #										#
-REM # (c) Copyright IBM Corporation 2018					#
+REM # (c) Copyright IBM Corporation 2018 - 2020					#
 REM # 										#
 REM # All rights reserved.							#
 REM # 										#
@@ -45,13 +44,13 @@ echo "Attestation"
 echo ""
 
 echo "Load the RSA signing key under the primary key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
 
 echo "Load the ECC signing key under the primary key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr signeccpriv.bin -ipu signeccpub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr signeccnistp256priv.bin -ipu signeccnistp256pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -141,6 +140,12 @@ for %%S in ("" "-se0 02000000 1") do (
 		exit /B 1
 		)
 	
+		echo "Set command audit digest ${HALG}"
+		%TPM_EXE_PATH%setcommandcodeauditstatus -hi p -halg null -clr 00000144 > run.out
+		IF !ERRORLEVEL! NEQ 0 (
+		exit /B 1
+		)
+
 		echo "Get command audit digest %%H %%A %%~S"
 		%TPM_EXE_PATH%getcommandauditdigest -hk !K! -halg %%H %%~S -pwdk sig -os sig.bin -oa tmp.bin -qd policies/aaa -salg %%A > run.out
 		IF !ERRORLEVEL! NEQ 0 (
@@ -168,14 +173,136 @@ IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
 
-echo "NV Undefine Space"
-%TPM_EXE_PATH%nvundefinespace -hi o -ha 01000000 > run.out
+echo "Flush the auth session"
+%TPM_EXE_PATH%flushcontext -ha 02000000 > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
 
-echo "Flush the auth session"
-%TPM_EXE_PATH%flushcontext -ha 02000000 > run.out
+echo ""
+echo "Attestation with an HMAC key"
+echo ""
+
+echo "Generate an HMAC key"
+%TPM_EXE_PATH%getrandom -by 32 -of tmphkey.bin -ns > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+for %%H in (%ITERATE_ALGS%) do (
+
+    echo "Create a %%H HMAC key"
+    %TPM_EXE_PATH%create -hp 80000000 -pwdp sto -kh -halg %%H -if tmphkey.bin -opu tmppub.bin -opr tmppriv.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Load the %%H HMAC key"
+    %TPM_EXE_PATH%load -hp 80000000 -pwdp sto -ipu tmppub.bin -ipr tmppriv.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Signing Key Self Certify with an HMAC key %%H"
+    %TPM_EXE_PATH%certify -hk 80000001 -ho 80000001 -halg %%H -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using TPM"
+    %TPM_EXE_PATH%verifysignature -hk 80000001 -halg %%H -if tmp.bin -is sig.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using OpenSSL"
+    %TPM_EXE_PATH%verifysignature -halg %%H -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Quote with an HMAC key %%H"
+    %TPM_EXE_PATH%quote -hp 0 -hk 80000001 -halg %%H -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using TPM"
+    %TPM_EXE_PATH%verifysignature -hk 80000001 -halg %%H -if tmp.bin -is sig.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using OpenSSL"
+    %TPM_EXE_PATH%verifysignature -halg %%H -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Gettime signed with an HMAC key %%H"
+    %TPM_EXE_PATH%gettime -hk 80000001 -halg %%H -salg hmac -os sig.bin -oa tmp.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using TPM"
+    %TPM_EXE_PATH%verifysignature -hk 80000001 -halg %%H -if tmp.bin -is sig.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using OpenSSL"
+    %TPM_EXE_PATH%verifysignature -halg %%H -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "NV Certify with an HMAC key %%H"
+    %TPM_EXE_PATH%nvcertify -ha 01000000 -pwdn nnn -hk 80000001 -halg %%H -salg hmac -sz 16 -os sig.bin -oa tmp.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using TPM"
+    %TPM_EXE_PATH%verifysignature -hk 80000001 -halg %%H -if tmp.bin -is sig.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using OpenSSL"
+    %TPM_EXE_PATH%verifysignature -halg %%H -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Get command audit digest with an HMAC key %%H"
+    %TPM_EXE_PATH%getcommandauditdigest -hk 80000001 -halg %%H -salg hmac -os sig.bin -oa tmp.bin -qd policies/aaa > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using TPM"
+    %TPM_EXE_PATH%verifysignature -hk 80000001 -halg %%H -if tmp.bin -is sig.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify the signature %%H using OpenSSL"
+    %TPM_EXE_PATH%verifysignature -halg %%H -if tmp.bin -is sig.bin -ihmac tmphkey.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Flush the %%H HMAC key"
+    %TPM_EXE_PATH%flushcontext -ha 80000001 > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+)
+
+echo "NV Undefine Space"
+%TPM_EXE_PATH%nvundefinespace -hi o -ha 01000000 > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -192,7 +319,7 @@ echo "Audit with one session"
 echo ""
 
 echo "Load the audit signing key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -209,13 +336,13 @@ for %%B in ("" "-bi 80000001 -pwdb sig") do (
     )
 
     echo "Sign a digest %%H"
-    %TPM_EXE_PATH%sign -hk 80000001 -halg %%H -if policies/aaa -os sig.bin -pwdk sig -ipu signpub.bin -se0 02000000 81 > run.out
+    %TPM_EXE_PATH%sign -hk 80000001 -halg %%H -if policies/aaa -os sig.bin -pwdk sig -ipu signrsa2048pub.bin -se0 02000000 81 > run.out
     IF !ERRORLEVEL! NEQ 0 (
         exit /B 1
     )
 
     echo "Sign a digest %%H"
-    %TPM_EXE_PATH%sign -hk 80000001 -halg %%H -if policies/aaa -os sig.bin -pwdk sig -se0 02000000 81 -ipu signpub.bin > run.out
+    %TPM_EXE_PATH%sign -hk 80000001 -halg %%H -if policies/aaa -os sig.bin -pwdk sig -ipu signrsa2048pub.bin -se0 02000000 81  > run.out
     IF !ERRORLEVEL! NEQ 0 (
         exit /B 1
     )
@@ -256,7 +383,7 @@ echo "Audit with HMAC and audit sessions"
 echo ""
 
 echo "Load the audit signing key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -278,7 +405,7 @@ for %%S in ("" "-se0 02000000 1") do (
        )
     
        echo "Sign a digest %%H"
-       %TPM_EXE_PATH%sign -hk 80000001 -halg %%H -if policies/aaa -os sig.bin -pwdk sig -ipu signpub.bin -se0 02000001 81 > run.out
+       %TPM_EXE_PATH%sign -hk 80000001 -halg %%H -if policies/aaa -os sig.bin -pwdk sig -ipu signrsa2048pub.bin -se0 02000001 81 > run.out
        IF !ERRORLEVEL! NEQ 0 (
            exit /B 1
        )
@@ -321,7 +448,7 @@ echo "Certify Creation"
 echo ""
 
 echo "Load the RSA signing key under the primary key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr signpriv.bin -ipu signpub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr signrsa2048priv.bin -ipu signrsa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -339,13 +466,13 @@ IF !ERRORLEVEL! NEQ 0 (
 )
 
 echo "Load the RSA storage key under the primary key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
 
 echo "Certify the creation data for the storage key 80000002"
-%TPM_EXE_PATH%certifycreation -ho 80000002 -hk 80000001 -pwdk sig -tk stotk.bin -ch stoch.bin -os sig.bin -oa tmp.bin > run.out
+%TPM_EXE_PATH%certifycreation -ho 80000002 -hk 80000001 -pwdk sig -tk storersa2048tk.bin -ch storersa2048ch.bin -os sig.bin -oa tmp.bin > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )

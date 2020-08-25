@@ -3,9 +3,8 @@ REM #										#
 REM #			TPM2 regression test					#
 REM #			     Written by Ken Goldman				#
 REM #		       IBM Thomas J. Watson Research Center			#
-REM #	$Id: testcreateloaded.bat 1278 2018-07-23 21:20:42Z kgoldman $		#
 REM #										#
-REM # (c) Copyright IBM Corporation 2015, 2017					#
+REM # (c) Copyright IBM Corporation 2015 - 2020					#
 REM # 										#
 REM # All rights reserved.							#
 REM # 										#
@@ -45,7 +44,7 @@ echo "CreateLoaded"
 echo ""
 
 echo ""
-echo "CreateLoaded Primary Key"
+echo "CreateLoaded Primary Key, Hierarchy Parent"
 echo ""
 
 for %%H in ("40000001" "4000000c" "4000000b") do (
@@ -113,7 +112,7 @@ for %%H in ("40000001" "4000000c" "4000000b") do (
 )
 
 echo ""
-echo "CreateLoaded Child Key"
+echo "CreateLoaded Child Key, Primary Parent"
 echo ""
 
 echo "CreateLoaded child storage key at 80000001, parent 80000000"
@@ -171,7 +170,57 @@ IF !ERRORLEVEL! NEQ 0 (
 )
 
 echo ""
-echo "CreateLoaded Derived Key"
+echo "CreateLoaded Primary Derived Key, Hierarchy Parent"
+echo ""
+
+for %%H in ("e" "o" "p") do (
+
+    echo "Create a primary %%~H derivation parent 80000001"
+    %TPM_EXE_PATH%createprimary -hi %%~H -dp > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Create a derived key 80000002"
+    %TPM_EXE_PATH%createloaded -hp 80000001 -der -ecc bnp256 -den -kt f -kt p -opu tmppub.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Flush the derived key 80000002"
+    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Create a derived key 80000002"
+    %TPM_EXE_PATH%createloaded -hp 80000001 -der -ecc bnp256 -den -kt f -kt p -opu tmppub1.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Flush the derived key 80000002"
+    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Verify that the two derived keys are the same"
+    diff tmppub.bin tmppub1.bin > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+    echo "Flush the derivation parent"
+    %TPM_EXE_PATH%flushcontext -ha 80000001 > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+       exit /B 1
+    )
+
+)
+
+echo ""
+echo "CreateLoaded Child Derived Key, Primary Parent"
 echo ""
 
 echo "Create a derivation parent under the primary key"
@@ -186,52 +235,55 @@ IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
 
-echo "Create an EC signing key under the derivation parent key"
-%TPM_EXE_PATH%createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -opem tmppub.pem  -pwdp dp -ecc nistp256 > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+for %%C in ("nistp256" "nistp384") do (
 
-echo "Sign a digest"
-%TPM_EXE_PATH%sign -hk 80000002 -halg sha256 -ecc -if policies/aaa -os sig.bin > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+    echo "Create an %%C ECC signing key under the derivation parent key"
+    %TPM_EXE_PATH%createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -opem tmppub.pem  -pwdp dp -ecc %%C > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 
-echo "Verify the ECC signature using the TPM"
-%TPM_EXE_PATH%verifysignature -hk 80000002 -halg sha256 -ecc -if policies/aaa -is sig.bin > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+    echo "Sign a digest"
+    %TPM_EXE_PATH%sign -hk 80000002 -halg sha256 -salg ecc -if policies/aaa -os sig.bin > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 
-echo "Verify the signature using PEM"
-%TPM_EXE_PATH%verifysignature -ipem tmppub.pem -halg sha256 -if policies/aaa -is sig.bin > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+    echo "Verify the %%C ECC signature using the TPM"
+    %TPM_EXE_PATH%verifysignature -hk 80000002 -halg sha256 -ecc -if policies/aaa -is sig.bin > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 
-echo "Flush the signing key 80000002"
-%TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+    echo "Verify the %%C signature using PEM"
+    %TPM_EXE_PATH%verifysignature -ipem tmppub.pem -halg sha256 -if policies/aaa -is sig.bin > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 
-echo "Create another EC signing key 80000002 under the derivation parent key"
-%TPM_EXE_PATH%createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv1.bin -opu tmppub1.bin -opem tmppub1.pem -pwdp dp -ecc nistp256 > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+    echo "Flush the signing key 80000002"
+    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 
-echo "Verify that the two derived keys are the same"
-diff tmppub.bin tmppub1.bin > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+    echo "Create another %%C ECC signing key 80000002 under the derivation parent key"
+    %TPM_EXE_PATH%createloaded -hp 80000001 -der -si -kt f -kt p -opr tmppriv1.bin -opu tmppub1.bin -opem tmppub1.pem -pwdp dp -ecc %%C > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 
-echo "Flush the signing key 80000002"
-%TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
+    echo "Verify that the two derived keys are the same"
+    diff tmppub.bin tmppub1.bin > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
+
+    echo "Flush the signing key 80000002"
+    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
+    )
 )
 
 echo "Flush the derivation parent"

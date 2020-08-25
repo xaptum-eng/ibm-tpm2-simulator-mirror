@@ -3,9 +3,8 @@
 /*			   policymaker						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: policymaker.c 1304 2018-08-20 18:31:45Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018					*/
+/* (c) Copyright IBM Corporation 2015 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -56,6 +55,8 @@
    Example input: policy command code with a command code of NV write
 
    0000016c00000137
+
+   TPM2_PolicyCounterTimer is handled as a special case, where there is a double hash.
 */
 
 #include <stdio.h>
@@ -63,9 +64,6 @@
 #include <string.h>
 #include <stdint.h>
 #include <errno.h>
-
-#include <openssl/err.h>
-#include <openssl/evp.h>
 
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
@@ -79,7 +77,7 @@ static int Format_FromHexascii(unsigned char *binary,
 static int Format_ByteFromHexascii(unsigned char *byte,
 				   const char *string);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -98,11 +96,12 @@ int main(int argc, char *argv[])
     FILE 		*inFile = NULL;
     FILE 		*outFile = NULL;
 
-	/* command line defaults */
+    setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
+    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
+    tssUtilsVerbose = FALSE;
+    
+    /* command line defaults */
     digest.hashAlg = TPM_ALG_SHA256;
-
-    ERR_load_crypto_strings ();
-    OpenSSL_add_all_algorithms ();
 
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-halg") == 0) {
@@ -164,7 +163,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -204,22 +203,48 @@ int main(int argc, char *argv[])
 	if (rc == 0) {
 	    prc = fgets(lineString, sizeof(lineString), inFile);
 	}
-	/* convert hex ascii to binary */ 
-	if ((rc == 0) && (prc != NULL)) {
-	    lineLength = strlen(lineString);
-	    rc = Format_FromHexascii(lineBinary,
-				     lineString, lineLength/2);
-	}
-	/* hash extend */
-	if ((rc == 0) && (prc != NULL)) {
-	    TSS_Hash_Generate(&digest,
-			      startSizeInBytes, (uint8_t *)&digest.digest,	/* extend */
-			      lineLength /2, lineBinary,
-			      0, NULL);
-	}
-	if ((rc == 0) && (prc != NULL)) {
-	    if (verbose) TSS_PrintAll("intermediate policy digest",
-				      (uint8_t *)&digest.digest, sizeInBytes);
+	if (prc != NULL) {
+	    /* convert hex ascii to binary */ 
+	    if (rc == 0) {
+		lineLength = strlen(lineString);
+		rc = Format_FromHexascii(lineBinary,
+					 lineString, lineLength/2);
+	    }
+	    if (rc == 0) {
+		/* not TPM2_PolicyCounterTimer */
+		if (memcmp(lineString, "0000016d", 8) != 0) {
+		    /* hash extend digest.digest with line */
+		    if (rc == 0) {
+			rc = TSS_Hash_Generate(&digest,
+					       startSizeInBytes, (uint8_t *)&digest.digest,
+					       lineLength /2, lineBinary,
+					       0, NULL);
+		    }
+		}
+		/* TPM2_PolicyCounterTimer is a special case - double hash */
+		else {
+		    TPMT_HA	args;
+		    args.hashAlg = digest.hashAlg;
+		    if (rc == 0) {
+			/* args is a hash of the arguments excluding the command code */
+			rc = TSS_Hash_Generate(&args,
+					       (lineLength /2) -4, lineBinary +4,
+					       0, NULL);
+		    }
+		    if (rc == 0) {
+			uint8_t commandCode[] = {0x00, 0x00, 0x01, 0x6d};
+			rc = TSS_Hash_Generate(&digest,
+					       startSizeInBytes, (uint8_t *)&digest.digest,
+					       sizeof(commandCode), commandCode,
+					       startSizeInBytes, (uint8_t *)&args.digest,
+					       0, NULL);
+		    }
+		}
+	    }
+	    if (rc == 0) {
+		if (tssUtilsVerbose) TSS_PrintAll("intermediate policy digest",
+					  (uint8_t *)&digest.digest, sizeInBytes);
+	    }
 	}
     }
     while ((rc == 0) && (prc != NULL));
@@ -228,8 +253,8 @@ int main(int argc, char *argv[])
 	TSS_PrintAll("policy digest", (uint8_t *)&digest.digest, sizeInBytes);
     }
     if ((rc == 0) && noSpace) {
-	printf("policy digest:\n");
 	unsigned int b;
+	printf("policy digest:\n");
 	for (b = 0 ; b < sizeInBytes ; b++) {
 	    printf("%02x", *(((uint8_t *)&digest.digest) + b));
 	}

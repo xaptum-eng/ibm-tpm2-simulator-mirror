@@ -3,9 +3,8 @@
 /*			   PCR_Read 						*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: pcrread.c 1304 2018-08-20 18:31:45Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -46,6 +45,13 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef TPM_POSIX
+#include <netinet/in.h>
+#endif
+#ifdef TPM_WINDOWS
+#include <winsock2.h>
+#endif
+
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
 #include <ibmtss/tssresponsecode.h>
@@ -56,7 +62,7 @@
 static void printPcrRead(PCR_Read_Out *out);
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -77,6 +83,7 @@ int main(int argc, char *argv[])
    
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
+    tssUtilsVerbose = FALSE;
     
     in.pcrSelectionIn.count = 0xffffffff;
 
@@ -199,7 +206,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -296,7 +303,7 @@ int main(int argc, char *argv[])
 				   cpBufferSize, cpBuffer,
 				   0, NULL);
 	}
-	if ((rc == 0) && verbose) {
+	if ((rc == 0) && tssUtilsVerbose) {
 #if 0
 	    TSS_PrintAll("cpBuffer", cpBuffer, cpBufferSize);
 	    TSS_PrintAll("cpHash", (uint8_t *)&cpHash.digest, sizeInBytes);
@@ -328,7 +335,7 @@ int main(int argc, char *argv[])
 				   rpBufferSize, rpBuffer,
 				   0, NULL);
 	}
-	if ((rc == 0) && verbose) {
+	if ((rc == 0) && tssUtilsVerbose) {
 #if 0
 	    TSS_PrintAll("rpBuffer", rpBuffer, rpBufferSize);
 	    TSS_PrintAll("rpHash", (uint8_t *)&rpHash.digest, sizeInBytes);
@@ -356,7 +363,7 @@ int main(int argc, char *argv[])
 				   sizeInBytes, (uint8_t *)&rpHash.digest,
 				   0, NULL);
 	}
-	if ((rc == 0) && verbose) {
+	if ((rc == 0) && tssUtilsVerbose) {
 	    TSS_PrintAll("Session digest old", sessionDigestData, sizeInBytes);
 	    TSS_PrintAll("Session digest new", (uint8_t *)&sessionDigest.digest, sizeInBytes);
 	}
@@ -389,7 +396,7 @@ int main(int argc, char *argv[])
 	/* human readable format, all hash algorithms */
 	else {
 	    printPcrRead(&out);
-	    if (verbose) printf("pcrread: success\n");
+	    if (tssUtilsVerbose) printf("pcrread: success\n");
 	}
     }
     return rc;
@@ -418,9 +425,9 @@ static void printUsage(void)
     printf("\t-halg\t(sha1, sha256, sha384, sha512) (default sha256)\n");
     printf("\t\t-halg may be specified more than once\n");
     printf("\t[-of\tdata file for first algorithm specified, in binary]\n");
-    printf("\t[-ahalg\tfor session audit digest (sha1, sha256, sha384, sha512) (default sha256)]\n");
-    printf("\t[-iosad\tfile for session audit digest testing]\n");
-    printf("\t[-ns\tno space, no text, no newlines\n");
+    printf("\t[-ahalg\t to extend session audit digest for testing (sha1, sha256, sha384, sha512) (default sha256)]\n");
+    printf("\t[-iosad\t file for session audit digest testing]\n");
+    printf("\t[-ns\tno space, no text, no newlines]\n");
     printf("\t\tUsed for scripting policy construction\n");
     printf("\n");
     printf("\t-se0 session handle / attributes (default NULL)\n");

@@ -3,9 +3,8 @@
 /*			   Import a PEM keypair 				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: importpem.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2016 - 2018					*/
+/* (c) Copyright IBM Corporation 2016 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -37,7 +36,7 @@
 /* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.		*/
 /********************************************************************************/
 
-/* Use OpenSSL to create an RSA  keypair like this
+/* Use OpenSSL to create an RSA or ECC keypair like this
 
    > openssl genrsa -out tmpprivkey.pem -aes256 -passout pass:rrrr 2048
    > openssl ecparam -name prime256v1 -genkey -noout |
@@ -50,8 +49,6 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <openssl/pem.h>
-
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
 #include <ibmtss/tssresponsecode.h>
@@ -63,7 +60,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -91,13 +88,12 @@ int main(int argc, char *argv[])
     unsigned int		sessionAttributes1 = 0;
     TPMI_SH_AUTH_SESSION    	sessionHandle2 = TPM_RH_NULL;
     unsigned int		sessionAttributes2 = 0;
-
-    RSA				*rsaKey = NULL;
     FILE 			*pemKeyFile = NULL;
     
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hp") == 0) {
@@ -332,7 +328,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -424,17 +420,17 @@ int main(int argc, char *argv[])
     /* output the TPM2B_PUBLIC */
     if (rc == 0) {
 	rc = TSS_File_WriteStructure(&in.objectPublic,
-				     (MarshalFunction_t)TSS_TPM2B_PUBLIC_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_PUBLIC_Marshalu,
 				     outPublicFilename);
     }
     /* output the TPM2B_PRIVATE, which is now wrapped by the parent */
     if (rc == 0) {
 	rc = TSS_File_WriteStructure(&out.outPrivate,
-				     (MarshalFunction_t)TSS_TPM2B_PRIVATE_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_PRIVATE_Marshalu,
 				     outPrivateFilename);
     }
     if (rc == 0) {
-	if (verbose) printf("importpem: success\n");
+	if (tssUtilsVerbose) printf("importpem: success\n");
     }
     else {
 	const char *msg;
@@ -444,9 +440,6 @@ int main(int argc, char *argv[])
 	TSS_ResponseCode_toString(&msg, &submsg, &num, rc);
 	printf("%s%s%s\n", msg, submsg, num);
 	rc = EXIT_FAILURE;
-    }
-    if (rsaKey != NULL) {
-	RSA_free(rsaKey);			/* @1 */
     }
     if (pemKeyFile != NULL) {
 	fclose(pemKeyFile);			/* @2 */

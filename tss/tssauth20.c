@@ -3,9 +3,8 @@
 /*			     TPM 2.0 TSS Authorization				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: tssauth20.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -73,572 +72,808 @@ typedef struct MARSHAL_TABLE {
     const char 			*commandText;
     MarshalInFunction_t 	marshalInFunction;	/* marshal input command */
     UnmarshalOutFunction_t 	unmarshalOutFunction;	/* unmarshal output response */
+#ifndef TPM_TSS_NOCMDCHECK
     UnmarshalInFunction_t	unmarshalInFunction;	/* unmarshal input command for parameter
 							   checking */
+#endif
 } MARSHAL_TABLE;
 
 static const MARSHAL_TABLE marshalTable [] = {
 				 
     {TPM_CC_Startup, "TPM2_Startup",
      (MarshalInFunction_t)TSS_Startup_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)Startup_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Startup_In_Unmarshal
+#endif
+    },
     {TPM_CC_Shutdown, "TPM2_Shutdown",
      (MarshalInFunction_t)TSS_Shutdown_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)Shutdown_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Shutdown_In_Unmarshal
+#endif
+    },
     {TPM_CC_SelfTest, "TPM2_SelfTest",
      (MarshalInFunction_t)TSS_SelfTest_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)SelfTest_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)SelfTest_In_Unmarshal
+#endif
+    },
     {TPM_CC_IncrementalSelfTest, "TPM2_IncrementalSelfTest",
      (MarshalInFunction_t)TSS_IncrementalSelfTest_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_IncrementalSelfTest_Out_Unmarshalu,
-     (UnmarshalInFunction_t)IncrementalSelfTest_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_IncrementalSelfTest_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)IncrementalSelfTest_In_Unmarshal
+#endif
+    },
     {TPM_CC_GetTestResult, "TPM2_GetTestResult",
      NULL,
-     (UnmarshalOutFunction_t)TSS_GetTestResult_Out_Unmarshalu,
-     NULL},
-
+     (UnmarshalOutFunction_t)TSS_GetTestResult_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,NULL
+#endif
+    },
     {TPM_CC_StartAuthSession, "TPM2_StartAuthSession",
      (MarshalInFunction_t)TSS_StartAuthSession_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_StartAuthSession_Out_Unmarshalu,
-     (UnmarshalInFunction_t)StartAuthSession_In_Unmarshal},
-    
+     (UnmarshalOutFunction_t)TSS_StartAuthSession_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)StartAuthSession_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyRestart, "TPM2_PolicyRestart",
      (MarshalInFunction_t)TSS_PolicyRestart_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyRestart_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyRestart_In_Unmarshal
+#endif
+    },
     {TPM_CC_Create, "TPM2_Create",
      (MarshalInFunction_t)TSS_Create_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Create_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Create_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Create_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Create_In_Unmarshal
+#endif
+    },
     {TPM_CC_Load, "TPM2_Load",
      (MarshalInFunction_t)TSS_Load_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Load_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Load_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Load_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Load_In_Unmarshal
+#endif
+    },
     {TPM_CC_LoadExternal, "TPM2_LoadExternal",
      (MarshalInFunction_t)TSS_LoadExternal_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_LoadExternal_Out_Unmarshalu,
-     (UnmarshalInFunction_t)LoadExternal_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_LoadExternal_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)LoadExternal_In_Unmarshal
+#endif
+    },
     {TPM_CC_ReadPublic, "TPM2_ReadPublic",
      (MarshalInFunction_t)TSS_ReadPublic_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ReadPublic_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ReadPublic_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ReadPublic_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ReadPublic_In_Unmarshal
+#endif
+    },
     {TPM_CC_ActivateCredential, "TPM2_ActivateCredential",
      (MarshalInFunction_t)TSS_ActivateCredential_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ActivateCredential_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ActivateCredential_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ActivateCredential_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ActivateCredential_In_Unmarshal
+#endif
+    },
     {TPM_CC_MakeCredential, "TPM2_MakeCredential",
      (MarshalInFunction_t)TSS_MakeCredential_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_MakeCredential_Out_Unmarshalu,
-     (UnmarshalInFunction_t)MakeCredential_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_MakeCredential_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)MakeCredential_In_Unmarshal
+#endif
+    },
     {TPM_CC_Unseal, "TPM2_Unseal",
      (MarshalInFunction_t)TSS_Unseal_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Unseal_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Unseal_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Unseal_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Unseal_In_Unmarshal
+#endif
+    },
     {TPM_CC_ObjectChangeAuth, "TPM2_ObjectChangeAuth",
      (MarshalInFunction_t)TSS_ObjectChangeAuth_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ObjectChangeAuth_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ObjectChangeAuth_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ObjectChangeAuth_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ObjectChangeAuth_In_Unmarshal
+#endif
+    },
     {TPM_CC_CreateLoaded, "TPM2_CreateLoaded",
      (MarshalInFunction_t)TSS_CreateLoaded_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_CreateLoaded_Out_Unmarshalu,
-     (UnmarshalInFunction_t)CreateLoaded_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_CreateLoaded_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)CreateLoaded_In_Unmarshal
+#endif
+    },
     {TPM_CC_Duplicate, "TPM2_Duplicate",
      (MarshalInFunction_t)TSS_Duplicate_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Duplicate_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Duplicate_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Duplicate_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Duplicate_In_Unmarshal
+#endif
+    },
     {TPM_CC_Rewrap, "TPM2_Rewrap",
      (MarshalInFunction_t)TSS_Rewrap_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Rewrap_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Rewrap_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Rewrap_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Rewrap_In_Unmarshal
+#endif
+    },
     {TPM_CC_Import, "TPM2_Import",
      (MarshalInFunction_t)TSS_Import_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Import_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Import_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Import_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Import_In_Unmarshal
+#endif
+    },
     {TPM_CC_RSA_Encrypt, "TPM2_RSA_Encrypt",
      (MarshalInFunction_t)TSS_RSA_Encrypt_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_RSA_Encrypt_Out_Unmarshalu,
-     (UnmarshalInFunction_t)RSA_Encrypt_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_RSA_Encrypt_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)RSA_Encrypt_In_Unmarshal
+#endif
+    },
     {TPM_CC_RSA_Decrypt, "TPM2_RSA_Decrypt",
      (MarshalInFunction_t)TSS_RSA_Decrypt_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_RSA_Decrypt_Out_Unmarshalu,
-     (UnmarshalInFunction_t)RSA_Decrypt_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_RSA_Decrypt_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)RSA_Decrypt_In_Unmarshal
+#endif
+    },
     {TPM_CC_ECDH_KeyGen, "TPM2_ECDH_KeyGen",
      (MarshalInFunction_t)TSS_ECDH_KeyGen_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ECDH_KeyGen_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ECDH_KeyGen_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ECDH_KeyGen_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ECDH_KeyGen_In_Unmarshal
+#endif
+    },
     {TPM_CC_ECDH_ZGen, "TPM2_ECDH_ZGen",
      (MarshalInFunction_t)TSS_ECDH_ZGen_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ECDH_ZGen_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ECDH_ZGen_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ECDH_ZGen_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ECDH_ZGen_In_Unmarshal
+#endif
+    },
     {TPM_CC_ECC_Parameters, "TPM2_ECC_Parameters",
      (MarshalInFunction_t)TSS_ECC_Parameters_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ECC_Parameters_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ECC_Parameters_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ECC_Parameters_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ECC_Parameters_In_Unmarshal
+#endif
+    },
     {TPM_CC_ZGen_2Phase, "TPM2_ZGen_2Phase",
      (MarshalInFunction_t)TSS_ZGen_2Phase_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ZGen_2Phase_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ZGen_2Phase_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ZGen_2Phase_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ZGen_2Phase_In_Unmarshal
+#endif
+    },
     {TPM_CC_EncryptDecrypt, "TPM2_EncryptDecrypt",
      (MarshalInFunction_t)TSS_EncryptDecrypt_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_EncryptDecrypt_Out_Unmarshalu,
-     (UnmarshalInFunction_t)EncryptDecrypt_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_EncryptDecrypt_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)EncryptDecrypt_In_Unmarshal
+#endif
+    },
     {TPM_CC_EncryptDecrypt2, "TPM2_EncryptDecrypt2",
      (MarshalInFunction_t)TSS_EncryptDecrypt2_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_EncryptDecrypt2_Out_Unmarshalu,
-     (UnmarshalInFunction_t)EncryptDecrypt2_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_EncryptDecrypt2_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)EncryptDecrypt2_In_Unmarshal
+#endif
+    },
     {TPM_CC_Hash, "TPM2_Hash",
      (MarshalInFunction_t)TSS_Hash_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Hash_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Hash_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Hash_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Hash_In_Unmarshal
+#endif
+    },
     {TPM_CC_HMAC, "TPM2_HMAC",
      (MarshalInFunction_t)TSS_HMAC_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_HMAC_Out_Unmarshalu,
-     (UnmarshalInFunction_t)HMAC_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_HMAC_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)HMAC_In_Unmarshal
+#endif
+    },
     {TPM_CC_GetRandom, "TPM2_GetRandom",
      (MarshalInFunction_t)TSS_GetRandom_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_GetRandom_Out_Unmarshalu,
-     (UnmarshalInFunction_t)GetRandom_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_GetRandom_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)GetRandom_In_Unmarshal
+#endif
+    },
     {TPM_CC_StirRandom, "TPM2_StirRandom",
      (MarshalInFunction_t)TSS_StirRandom_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)StirRandom_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)StirRandom_In_Unmarshal
+#endif
+    },
     {TPM_CC_HMAC_Start, "TPM2_HMAC_Start",
      (MarshalInFunction_t)TSS_HMAC_Start_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_HMAC_Start_Out_Unmarshalu,
-     (UnmarshalInFunction_t)HMAC_Start_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_HMAC_Start_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)HMAC_Start_In_Unmarshal
+#endif
+    },
     {TPM_CC_HashSequenceStart, "TPM2_HashSequenceStart",
      (MarshalInFunction_t)TSS_HashSequenceStart_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_HashSequenceStart_Out_Unmarshalu,
-     (UnmarshalInFunction_t)HashSequenceStart_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_HashSequenceStart_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)HashSequenceStart_In_Unmarshal
+#endif
+    },
     {TPM_CC_SequenceUpdate, "TPM2_SequenceUpdate",
      (MarshalInFunction_t)TSS_SequenceUpdate_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)SequenceUpdate_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)SequenceUpdate_In_Unmarshal
+#endif
+    },
     {TPM_CC_SequenceComplete, "TPM2_SequenceComplete",
      (MarshalInFunction_t)TSS_SequenceComplete_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_SequenceComplete_Out_Unmarshalu,
-     (UnmarshalInFunction_t)SequenceComplete_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_SequenceComplete_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)SequenceComplete_In_Unmarshal
+#endif
+    },
     {TPM_CC_EventSequenceComplete, "TPM2_EventSequenceComplete",
      (MarshalInFunction_t)TSS_EventSequenceComplete_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_EventSequenceComplete_Out_Unmarshalu,
-     (UnmarshalInFunction_t)EventSequenceComplete_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_EventSequenceComplete_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)EventSequenceComplete_In_Unmarshal
+#endif
+    },
     {TPM_CC_Certify, "TPM2_Certify",
      (MarshalInFunction_t)TSS_Certify_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Certify_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Certify_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Certify_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Certify_In_Unmarshal
+#endif
+    },
+    {TPM_CC_CertifyX509, "TPM2_CertifyX509",
+     (MarshalInFunction_t)TSS_CertifyX509_In_Marshalu,
+     (UnmarshalOutFunction_t)TSS_CertifyX509_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)CertifyX509_In_Unmarshal
+#endif
+    },
     {TPM_CC_CertifyCreation, "TPM2_CertifyCreation",
      (MarshalInFunction_t)TSS_CertifyCreation_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_CertifyCreation_Out_Unmarshalu,
-     (UnmarshalInFunction_t)CertifyCreation_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_CertifyCreation_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)CertifyCreation_In_Unmarshal
+#endif
+    },
     {TPM_CC_Quote, "TPM2_Quote",
      (MarshalInFunction_t)TSS_Quote_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Quote_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Quote_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Quote_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Quote_In_Unmarshal
+#endif
+    },
     {TPM_CC_GetSessionAuditDigest, "TPM2_GetSessionAuditDigest",
      (MarshalInFunction_t)TSS_GetSessionAuditDigest_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_GetSessionAuditDigest_Out_Unmarshalu,
-     (UnmarshalInFunction_t)GetSessionAuditDigest_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_GetSessionAuditDigest_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)GetSessionAuditDigest_In_Unmarshal
+#endif
+    },
     {TPM_CC_GetCommandAuditDigest, "TPM2_GetCommandAuditDigest",
      (MarshalInFunction_t)TSS_GetCommandAuditDigest_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_GetCommandAuditDigest_Out_Unmarshalu,
-     (UnmarshalInFunction_t)GetCommandAuditDigest_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_GetCommandAuditDigest_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)GetCommandAuditDigest_In_Unmarshal
+#endif
+    },
     {TPM_CC_GetTime, "TPM2_GetTime",
      (MarshalInFunction_t)TSS_GetTime_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_GetTime_Out_Unmarshalu,
-     (UnmarshalInFunction_t)GetTime_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_GetTime_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)GetTime_In_Unmarshal
+#endif
+    },
     {TPM_CC_Commit, "TPM2_Commit",
      (MarshalInFunction_t)TSS_Commit_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Commit_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Commit_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Commit_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Commit_In_Unmarshal
+#endif
+    },
     {TPM_CC_EC_Ephemeral, "TPM2_EC_Ephemeral",
      (MarshalInFunction_t)TSS_EC_Ephemeral_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_EC_Ephemeral_Out_Unmarshalu,
-     (UnmarshalInFunction_t)EC_Ephemeral_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_EC_Ephemeral_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)EC_Ephemeral_In_Unmarshal
+#endif
+    },
     {TPM_CC_VerifySignature, "TPM2_VerifySignature",
      (MarshalInFunction_t)TSS_VerifySignature_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_VerifySignature_Out_Unmarshalu,
-     (UnmarshalInFunction_t)VerifySignature_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_VerifySignature_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)VerifySignature_In_Unmarshal
+#endif
+    },
     {TPM_CC_Sign, "TPM2_Sign",
      (MarshalInFunction_t)TSS_Sign_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_Sign_Out_Unmarshalu,
-     (UnmarshalInFunction_t)Sign_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_Sign_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Sign_In_Unmarshal
+#endif
+    },
     {TPM_CC_SetCommandCodeAuditStatus, "TPM2_SetCommandCodeAuditStatus",
      (MarshalInFunction_t)TSS_SetCommandCodeAuditStatus_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)SetCommandCodeAuditStatus_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)SetCommandCodeAuditStatus_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_Extend, "TPM2_PCR_Extend",
      (MarshalInFunction_t)TSS_PCR_Extend_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PCR_Extend_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_Extend_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_Event, "TPM2_PCR_Event",
      (MarshalInFunction_t)TSS_PCR_Event_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_PCR_Event_Out_Unmarshalu,
-     (UnmarshalInFunction_t)PCR_Event_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_PCR_Event_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_Event_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_Read, "TPM2_PCR_Read",
      (MarshalInFunction_t)TSS_PCR_Read_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_PCR_Read_Out_Unmarshalu,
-     (UnmarshalInFunction_t)PCR_Read_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_PCR_Read_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_Read_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_Allocate, "TPM2_PCR_Allocate",
      (MarshalInFunction_t)TSS_PCR_Allocate_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_PCR_Allocate_Out_Unmarshalu,
-     (UnmarshalInFunction_t)PCR_Allocate_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_PCR_Allocate_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_Allocate_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_SetAuthPolicy, "TPM2_PCR_SetAuthPolicy",
      (MarshalInFunction_t)TSS_PCR_SetAuthPolicy_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PCR_SetAuthPolicy_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_SetAuthPolicy_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_SetAuthValue, "TPM2_PCR_SetAuthValue",
      (MarshalInFunction_t)TSS_PCR_SetAuthValue_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PCR_SetAuthValue_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_SetAuthValue_In_Unmarshal
+#endif
+    },
     {TPM_CC_PCR_Reset, "TPM2_PCR_Reset",
      (MarshalInFunction_t)TSS_PCR_Reset_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PCR_Reset_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PCR_Reset_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicySigned, "TPM2_PolicySigned",
      (MarshalInFunction_t)TSS_PolicySigned_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_PolicySigned_Out_Unmarshalu,
-     (UnmarshalInFunction_t)PolicySigned_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_PolicySigned_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicySigned_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicySecret, "TPM2_PolicySecret",
      (MarshalInFunction_t)TSS_PolicySecret_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_PolicySecret_Out_Unmarshalu,
-     (UnmarshalInFunction_t)PolicySecret_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_PolicySecret_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicySecret_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyTicket, "TPM2_PolicyTicket",
      (MarshalInFunction_t)TSS_PolicyTicket_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyTicket_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyTicket_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyOR, "TPM2_PolicyOR",
      (MarshalInFunction_t)TSS_PolicyOR_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyOR_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyOR_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyPCR, "TPM2_PolicyPCR",
      (MarshalInFunction_t)TSS_PolicyPCR_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyPCR_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyPCR_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyLocality, "TPM2_PolicyLocality",
      (MarshalInFunction_t)TSS_PolicyLocality_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyLocality_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyLocality_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyNV, "TPM2_PolicyNV",
      (MarshalInFunction_t)TSS_PolicyNV_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyNV_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyNV_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyAuthorizeNV, "TPM2_PolicyAuthorizeNV",
      (MarshalInFunction_t)TSS_PolicyAuthorizeNV_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyAuthorizeNV_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyAuthorizeNV_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyCounterTimer, "TPM2_PolicyCounterTimer",
      (MarshalInFunction_t)TSS_PolicyCounterTimer_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyCounterTimer_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyCounterTimer_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyCommandCode, "TPM2_PolicyCommandCode",
      (MarshalInFunction_t)TSS_PolicyCommandCode_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyCommandCode_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyCommandCode_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyPhysicalPresence, "TPM2_PolicyPhysicalPresence",
      (MarshalInFunction_t)TSS_PolicyPhysicalPresence_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyPhysicalPresence_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyPhysicalPresence_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyCpHash, "TPM2_PolicyCpHash",
      (MarshalInFunction_t)TSS_PolicyCpHash_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyCpHash_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyCpHash_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyNameHash, "TPM2_PolicyNameHash",
      (MarshalInFunction_t)TSS_PolicyNameHash_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyNameHash_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyNameHash_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyDuplicationSelect, "TPM2_PolicyDuplicationSelect",
      (MarshalInFunction_t)TSS_PolicyDuplicationSelect_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyDuplicationSelect_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyDuplicationSelect_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyAuthorize, "TPM2_PolicyAuthorize",
      (MarshalInFunction_t)TSS_PolicyAuthorize_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyAuthorize_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyAuthorize_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyAuthValue, "TPM2_PolicyAuthValue",
      (MarshalInFunction_t)TSS_PolicyAuthValue_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyAuthValue_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyAuthValue_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyPassword, "TPM2_PolicyPassword",
      (MarshalInFunction_t)TSS_PolicyPassword_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyPassword_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyPassword_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyGetDigest, "TPM2_PolicyGetDigest",
      (MarshalInFunction_t)TSS_PolicyGetDigest_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_PolicyGetDigest_Out_Unmarshalu,
-     (UnmarshalInFunction_t)PolicyGetDigest_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_PolicyGetDigest_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyGetDigest_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyNvWritten, "TPM2_PolicyNvWritten",
      (MarshalInFunction_t)TSS_PolicyNvWritten_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyNvWritten_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyNvWritten_In_Unmarshal
+#endif
+    },
     {TPM_CC_PolicyTemplate, "TPM2_PolicyTemplate",
      (MarshalInFunction_t)TSS_PolicyTemplate_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PolicyTemplate_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PolicyTemplate_In_Unmarshal
+#endif
+    },
     {TPM_CC_CreatePrimary, "TPM2_CreatePrimary",
      (MarshalInFunction_t)TSS_CreatePrimary_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_CreatePrimary_Out_Unmarshalu,
-     (UnmarshalInFunction_t)CreatePrimary_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_CreatePrimary_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)CreatePrimary_In_Unmarshal
+#endif
+    },
     {TPM_CC_HierarchyControl, "TPM2_HierarchyControl",
      (MarshalInFunction_t)TSS_HierarchyControl_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)HierarchyControl_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)HierarchyControl_In_Unmarshal
+#endif
+    },
     {TPM_CC_SetPrimaryPolicy, "TPM2_SetPrimaryPolicy",
      (MarshalInFunction_t)TSS_SetPrimaryPolicy_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)SetPrimaryPolicy_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)SetPrimaryPolicy_In_Unmarshal
+#endif
+    },
     {TPM_CC_ChangePPS, "TPM2_ChangePPS",
      (MarshalInFunction_t)TSS_ChangePPS_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)ChangePPS_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ChangePPS_In_Unmarshal
+#endif
+    },
     {TPM_CC_ChangeEPS, "TPM2_ChangeEPS",
      (MarshalInFunction_t)TSS_ChangeEPS_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)ChangeEPS_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ChangeEPS_In_Unmarshal
+#endif
+    },
     {TPM_CC_Clear, "TPM2_Clear",
      (MarshalInFunction_t)TSS_Clear_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)Clear_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)Clear_In_Unmarshal
+#endif
+    },
     {TPM_CC_ClearControl, "TPM2_ClearControl",
      (MarshalInFunction_t)TSS_ClearControl_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)ClearControl_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ClearControl_In_Unmarshal
+#endif
+    },
     {TPM_CC_HierarchyChangeAuth, "TPM2_HierarchyChangeAuth",
      (MarshalInFunction_t)TSS_HierarchyChangeAuth_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)HierarchyChangeAuth_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)HierarchyChangeAuth_In_Unmarshal
+#endif
+    },
     {TPM_CC_DictionaryAttackLockReset, "TPM2_DictionaryAttackLockReset",
      (MarshalInFunction_t)TSS_DictionaryAttackLockReset_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)DictionaryAttackLockReset_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)DictionaryAttackLockReset_In_Unmarshal
+#endif
+    },
     {TPM_CC_DictionaryAttackParameters, "TPM2_DictionaryAttackParameters",
      (MarshalInFunction_t)TSS_DictionaryAttackParameters_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)DictionaryAttackParameters_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)DictionaryAttackParameters_In_Unmarshal
+#endif
+    },
     {TPM_CC_PP_Commands, "TPM2_PP_Commands",
      (MarshalInFunction_t)TSS_PP_Commands_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)PP_Commands_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)PP_Commands_In_Unmarshal
+#endif
+    },
     {TPM_CC_SetAlgorithmSet, "TPM2_SetAlgorithmSet",
      (MarshalInFunction_t)TSS_SetAlgorithmSet_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)SetAlgorithmSet_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)SetAlgorithmSet_In_Unmarshal
+#endif
+    },
     {TPM_CC_ContextSave, "TPM2_ContextSave",
      (MarshalInFunction_t)TSS_ContextSave_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ContextSave_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ContextSave_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ContextSave_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ContextSave_In_Unmarshal
+#endif
+    },
     {TPM_CC_ContextLoad, "TPM2_ContextLoad",
      (MarshalInFunction_t)TSS_ContextLoad_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_ContextLoad_Out_Unmarshalu,
-     (UnmarshalInFunction_t)ContextLoad_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_ContextLoad_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ContextLoad_In_Unmarshal
+#endif
+    },
     {TPM_CC_FlushContext, "TPM2_FlushContext",
      (MarshalInFunction_t)TSS_FlushContext_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)FlushContext_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)FlushContext_In_Unmarshal
+#endif
+    },
     {TPM_CC_EvictControl, "TPM2_EvictControl",
      (MarshalInFunction_t)TSS_EvictControl_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)EvictControl_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)EvictControl_In_Unmarshal
+#endif
+    },
     {TPM_CC_ReadClock, "TPM2_ReadClock",
      NULL,
-     (UnmarshalOutFunction_t)TSS_ReadClock_Out_Unmarshalu,
-     NULL},
-
+     (UnmarshalOutFunction_t)TSS_ReadClock_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,NULL
+#endif
+    },
     {TPM_CC_ClockSet, "TPM2_ClockSet",
      (MarshalInFunction_t)TSS_ClockSet_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)ClockSet_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ClockSet_In_Unmarshal
+#endif
+    },
     {TPM_CC_ClockRateAdjust, "TPM2_ClockRateAdjust",
      (MarshalInFunction_t)TSS_ClockRateAdjust_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)ClockRateAdjust_In_Unmarshal},
-    
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)ClockRateAdjust_In_Unmarshal
+#endif
+    },
     {TPM_CC_GetCapability, "TPM2_GetCapability",
      (MarshalInFunction_t)TSS_GetCapability_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_GetCapability_Out_Unmarshalu,
-     (UnmarshalInFunction_t)GetCapability_In_Unmarshal},
-    
+     (UnmarshalOutFunction_t)TSS_GetCapability_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)GetCapability_In_Unmarshal
+#endif
+    },
     {TPM_CC_TestParms, "TPM2_TestParms",
      (MarshalInFunction_t)TSS_TestParms_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)TestParms_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)TestParms_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_DefineSpace, "TPM2_NV_DefineSpace",
      (MarshalInFunction_t)TSS_NV_DefineSpace_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_DefineSpace_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_DefineSpace_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_UndefineSpace, "TPM2_NV_UndefineSpace",
      (MarshalInFunction_t)TSS_NV_UndefineSpace_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_UndefineSpace_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_UndefineSpace_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_UndefineSpaceSpecial, "TPM2_NV_UndefineSpaceSpecial",
      (MarshalInFunction_t)TSS_NV_UndefineSpaceSpecial_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_UndefineSpaceSpecial_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_UndefineSpaceSpecial_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_ReadPublic, "TPM2_NV_ReadPublic",
      (MarshalInFunction_t)TSS_NV_ReadPublic_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_NV_ReadPublic_Out_Unmarshalu,
-     (UnmarshalInFunction_t)NV_ReadPublic_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_NV_ReadPublic_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_ReadPublic_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_Write, "TPM2_NV_Write",
      (MarshalInFunction_t)TSS_NV_Write_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_Write_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_Write_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_Increment, "TPM2_NV_Increment",
      (MarshalInFunction_t)TSS_NV_Increment_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_Increment_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_Increment_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_Extend, "TPM2_NV_Extend",
      (MarshalInFunction_t)TSS_NV_Extend_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_Extend_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_Extend_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_SetBits, "TPM2_NV_SetBits",
      (MarshalInFunction_t)TSS_NV_SetBits_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_SetBits_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_SetBits_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_WriteLock, "TPM2_NV_WriteLock",
      (MarshalInFunction_t)TSS_NV_WriteLock_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_WriteLock_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_WriteLock_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_GlobalWriteLock, "TPM2_NV_GlobalWriteLock",
      (MarshalInFunction_t)TSS_NV_GlobalWriteLock_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_GlobalWriteLock_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_GlobalWriteLock_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_Read, "TPM2_NV_Read",
      (MarshalInFunction_t)TSS_NV_Read_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_NV_Read_Out_Unmarshalu,
-     (UnmarshalInFunction_t)NV_Read_In_Unmarshal},
-
+     (UnmarshalOutFunction_t)TSS_NV_Read_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_Read_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_ReadLock, "TPM2_NV_ReadLock",
      (MarshalInFunction_t)TSS_NV_ReadLock_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_ReadLock_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_ReadLock_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_ChangeAuth, "TPM2_NV_ChangeAuth",
      (MarshalInFunction_t)TSS_NV_ChangeAuth_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)NV_ChangeAuth_In_Unmarshal},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_ChangeAuth_In_Unmarshal
+#endif
+    },
     {TPM_CC_NV_Certify, "TPM2_NV_Certify",
      (MarshalInFunction_t)TSS_NV_Certify_In_Marshalu,
-     (UnmarshalOutFunction_t)TSS_NV_Certify_Out_Unmarshalu,
-     (UnmarshalInFunction_t)NV_Certify_In_Unmarshal},
-#ifdef TPM_TPM20
+     (UnmarshalOutFunction_t)TSS_NV_Certify_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)NV_Certify_In_Unmarshal
+#endif
+    },
+#ifdef TPM_TSS_NUVOTON
     {NTC2_CC_PreConfig,"NTC2_CC_PreConfig",
      (MarshalInFunction_t)TSS_NTC2_PreConfig_In_Marshalu,
-     NULL,
-     (UnmarshalInFunction_t)TSS_NTC2_PreConfig_In_Unmarshalu},
-     
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,(UnmarshalInFunction_t)TSS_NTC2_PreConfig_In_Unmarshalu
+#endif
+    },
     {NTC2_CC_LockPreConfig,"NTC2_CC_LockPreConfig",
      NULL,
-     NULL,
-     NULL},
-
+     NULL
+#ifndef TPM_TSS_NOCMDCHECK
+     ,NULL
+#endif
+    },
     {NTC2_CC_GetConfig,"NTC2_CC_GetConfig",
      NULL,
-     (UnmarshalOutFunction_t)TSS_NTC2_GetConfig_Out_Unmarshalu,
-     NULL}
+     (UnmarshalOutFunction_t)TSS_NTC2_GetConfig_Out_Unmarshalu
+#ifndef TPM_TSS_NOCMDCHECK
+     ,NULL
 #endif
+    },
+     
+#endif	/* TPM_TSS_NUVOTON */
 };
 
 /* TSS_MarshalTable_Process() indexes into the command marshal table, and saves the marshal and
@@ -663,7 +898,9 @@ static TPM_RC TSS_MarshalTable_Process(TSS_AUTH_CONTEXT *tssAuthContext,
 	tssAuthContext->commandText = marshalTable[index].commandText;
 	tssAuthContext->marshalInFunction = marshalTable[index].marshalInFunction;
 	tssAuthContext->unmarshalOutFunction = marshalTable[index].unmarshalOutFunction;
+#ifndef TPM_TSS_NOCMDCHECK
 	tssAuthContext->unmarshalInFunction = marshalTable[index].unmarshalInFunction;
+#endif
     }
     else {
 	if (tssVerbose) printf("TSS_MarshalTable_Process: "
@@ -686,7 +923,9 @@ TPM_RC TSS_Marshal(TSS_AUTH_CONTEXT *tssAuthContext,
     TPM_RC 		rc = 0;
     TPMI_ST_COMMAND_TAG tag = TPM_ST_NO_SESSIONS;	/* default until sessions are added */
     uint8_t 		*buffer;			/* for marshaling */
+#ifndef TPM_TSS_NOCMDCHECK
     uint8_t 		*bufferu;			/* for test unmarshaling */
+#endif
     uint32_t 		size;
     
     /* index from command code to table and save items for this command */
@@ -724,9 +963,11 @@ TPM_RC TSS_Marshal(TSS_AUTH_CONTEXT *tssAuthContext,
 	rc = TSS_TPM_CC_Marshalu(&commandCode, &tssAuthContext->commandSize, &buffer, &size);
     }    
     if (rc == 0) {
+#ifndef TPM_TSS_NOCMDCHECK
 	/* save pointer to marshaled data for test unmarshal */
 	bufferu = buffer +
 		  tssAuthContext->commandHandleCount * sizeof(TPM_HANDLE);
+#endif
 	/* if there is a marshal function */
 	if (tssAuthContext->marshalInFunction != NULL) {
 	    /* if there is a structure to marshal */
@@ -754,20 +995,29 @@ TPM_RC TSS_Marshal(TSS_AUTH_CONTEXT *tssAuthContext,
 	    /* no marshal function and no command parameter structure is OK */
 	}
     }
+#ifndef TPM_TSS_NOCMDCHECK
     /* unmarshal to validate the input parameters */
     if ((rc == 0) && (tssAuthContext->unmarshalInFunction != NULL)) {
-	COMMAND_PARAMETERS target;
+	COMMAND_PARAMETERS *target = NULL;
 	TPM_HANDLE 	handles[MAX_HANDLE_NUM];
-	size = sizeof(tssAuthContext->commandBuffer) -
-	       (tssAuthContext->commandHandleCount * sizeof(TPM_HANDLE));
-	rc = tssAuthContext->unmarshalInFunction(&target, &bufferu, &size, handles);
-	if ((rc != 0) && tssVerbose) {
-	    printf("TSS_Marshal: Invalid command parameter\n");
+	if (rc == 0) {
+	    rc = TSS_Malloc((unsigned char **)&target,
+			    sizeof(COMMAND_PARAMETERS));	/* freed @1 */
 	}
+	if (rc == 0) {
+	    size = sizeof(tssAuthContext->commandBuffer) -
+		   (tssAuthContext->commandHandleCount * sizeof(TPM_HANDLE));
+	    rc = tssAuthContext->unmarshalInFunction(target, &bufferu, &size, handles);
+	    if ((rc != 0) && tssVerbose) {
+		printf("TSS_Marshal: Invalid command parameter\n");
+	    }
+	}
+	free(target);		/* @1 */
     }
+#endif
     /* back fill the correct commandSize */
     if (rc == 0) {
-	uint16_t written;		/* dummy */
+	uint16_t written = 0;		/* dummy */
 	uint32_t commandSize = tssAuthContext->commandSize;
 	buffer = tssAuthContext->commandBuffer + sizeof(TPMI_ST_COMMAND_TAG);
 	TSS_UINT32_Marshalu(&commandSize, &written, &buffer, NULL);
@@ -909,7 +1159,7 @@ TPM_RC TSS_SetCmdAuths(TSS_AUTH_CONTEXT *tssAuthContext, ...)
 	/* marshal the authorizationSize area, where cpBuffer was before move */
 	if (rc == 0) {
 	    uint32_t authorizationSize32 = authorizationSize;
-	    uint16_t written;		/* dummy */
+	    uint16_t written = 0;		/* dummy */
 	    TSS_UINT32_Marshalu(&authorizationSize32, &written, &cpBuffer, NULL);
 	}
 	/* marshal the command authorization areas */
@@ -929,7 +1179,7 @@ TPM_RC TSS_SetCmdAuths(TSS_AUTH_CONTEXT *tssAuthContext, ...)
 	}
 	va_end(ap);
 	if (rc == 0) {
-	    uint16_t written;		/* dummy */
+	    uint16_t written = 0;		/* dummy */
 	    uint32_t commandSize;
 	    /* mark cpBuffer new location, size doesn't change */
 	    tssAuthContext->cpBuffer += sizeof (uint32_t) + authorizationSize;
@@ -1147,7 +1397,7 @@ TPM_RC TSS_GetRpBuffer(TSS_AUTH_CONTEXT *tssAuthContext,
 {
     TPM_RC 	rc = 0;
     TPM_ST 	tag;			/* response tag */
-    uint32_t 	offsetSize;		/* to beginning of parameter area */
+    uint32_t 	offsetSize;		/* to beginning of parameter area, to parameterSize */
     uint32_t 	size;			/* tmp for unmarshal */
     uint8_t 	*buffer;		/* tmp for unmarshal */
     uint32_t 	parameterSize;		/* response parameter (if sessions) */
@@ -1179,6 +1429,7 @@ TPM_RC TSS_GetRpBuffer(TSS_AUTH_CONTEXT *tssAuthContext,
     }
     /* sessions -> parameterSize */
     else {
+	/* validate that there are enough response bytes for uint32_t parameterSize */
 	if (rc == 0) {
 	    if ((offsetSize + sizeof(uint32_t)) > tssAuthContext->responseSize) {
 		if (tssVerbose)
@@ -1187,14 +1438,34 @@ TPM_RC TSS_GetRpBuffer(TSS_AUTH_CONTEXT *tssAuthContext,
 		rc = TSS_RC_MALFORMED_RESPONSE;
 	    }
 	}
+	/* unmarshal the parameterSize */
 	if (rc == 0) {
 	    size = tssAuthContext->responseSize - offsetSize;
 	    buffer = tssAuthContext->responseBuffer + offsetSize;
 	    rc = TSS_UINT32_Unmarshalu(&parameterSize, &buffer, &size);
+	    offsetSize += sizeof(uint32_t);	/* move offset past parameterSize, to rpBuffer */
 	}
+	/* range check parameterSize */
+	/* first, check that addition willl not overflow */
 	if (rc == 0) {
-	    offsetSize += sizeof(uint32_t);
-	    *rpBufferSize = parameterSize;
+	    if (parameterSize > (0xffffffff - offsetSize)) {
+		if (tssVerbose) printf("TSS_GetRpBuffer: parameterSize %u too large\n",
+				       parameterSize);
+		rc = TSS_RC_MALFORMED_RESPONSE;
+	    }
+	}
+	/* second, range check parameterSize vs. entire response buffer */
+	if (rc == 0) {
+	    if ((offsetSize + parameterSize) > tssAuthContext->responseSize) {
+		if (tssVerbose)
+		    printf("TSS_GetRpBuffer: parameterSize %u past response buffer %u\n",
+			   parameterSize, tssAuthContext->responseSize);
+		rc = TSS_RC_MALFORMED_RESPONSE;
+	    }
+	}
+	/* assignment safe after above checks */
+	if (rc == 0) {
+	    *rpBufferSize = parameterSize;	/* by definition when there are auth sessions */
 	    *rpBuffer = tssAuthContext->responseBuffer + offsetSize;
 	}
     }

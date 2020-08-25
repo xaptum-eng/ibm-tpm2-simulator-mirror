@@ -3,9 +3,8 @@
 /*			   Time a TPM Command					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: timepacket.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2017 - 2018					*/
+/* (c) Copyright IBM Corporation 2017 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -47,18 +46,26 @@
 #include <stdint.h>
 #include <time.h>
 
-#include <unistd.h>
+#ifdef TPM_WINDOWS
+#include <winsock2.h>
+#include <windows.h>
+#endif
 
-#include <openssl/rand.h>
+#ifdef TPM_POSIX
+#include <unistd.h>
+#endif
 
 #include <ibmtss/tss.h>
 #include <ibmtss/tsstransmit.h>
 #include <ibmtss/tssfile.h>
 #include <ibmtss/tssresponsecode.h>
+#include <ibmtss/tsscrypto.h>
+
+#include "cryptoutils.h"
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -72,14 +79,16 @@ int main(int argc, char *argv[])
     size_t 			commandLength;
     unsigned int 		loops = 1;
     unsigned int 		count;
-    uint8_t 			responseBuffer[MAX_RESPONSE_SIZE];;
+    uint8_t 			responseBuffer[MAX_RESPONSE_SIZE];
     uint32_t 			responseLength;
     time_t 			startTime;
     time_t			endTime;
+    double 			timeDiff = 0;
     
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-if") == 0) {
@@ -106,7 +115,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -119,7 +128,8 @@ int main(int argc, char *argv[])
 	printUsage();
     }
     if (rc == 0) {
-	rc = TSS_File_ReadBinaryFile(&commandBufferString, &commandStringLength, commandFilename);
+	rc = TSS_File_ReadBinaryFile(&commandBufferString,	/* freed @2 */
+				     &commandStringLength, commandFilename);
     }
     if (rc == 0) {
 	if (commandBufferString[commandStringLength-1] != ' ') {
@@ -138,22 +148,28 @@ int main(int argc, char *argv[])
     if (rc == 0) {
 	rc = TSS_Create(&tssContext);
     }
-    double timeDiff = 0;
     for (count = 0 ; (rc == 0) && (count < loops) ; count++) {
 	uint32_t usec;
-	RAND_bytes((unsigned char *)&usec, sizeof(uint32_t));
-	usec %= 1000000;
-	usleep(usec);
-	startTime = time(NULL);
-	rc = TSS_Transmit(tssContext,
-			  responseBuffer, &responseLength,
-			  commandBuffer, commandLength,
-			  NULL);
-	endTime = time(NULL);
-	printf("End Pass %u\n", count +1);
- 	timeDiff += difftime(endTime, startTime);
-   }
-    if (rc == 0) {
+	if (rc == 0) {
+	    rc = TSS_RandBytes((unsigned char *)&usec, sizeof(uint32_t));
+	}
+	if (rc == 0) {
+	    usec %= 1000000;
+#ifdef TPM_POSIX
+	    usleep(usec);	/* usleep() units are usec */
+#endif
+#ifdef TPM_WINDOWS
+	    Sleep(usec/1000);	/* Sleep units are msec */
+#endif
+	    startTime = time(NULL);
+	    rc = TSS_Transmit(tssContext,
+			      responseBuffer, &responseLength,
+			      commandBuffer, commandLength,
+			      NULL);
+	    endTime = time(NULL);
+	    printf("End Pass %u\n", count +1);
+	    timeDiff += difftime(endTime, startTime);
+	}
     }
     {
 	TPM_RC rc1 = TSS_Delete(tssContext);
@@ -165,7 +181,7 @@ int main(int argc, char *argv[])
 	printf("Loops %u time %f time per pass %f\n", loops, timeDiff, timeDiff/loops);
     }
     if (rc == 0) {
-	if (verbose) printf("timepacket: success\n");
+	if (tssUtilsVerbose) printf("timepacket: success\n");
     }
     else {
 	const char *msg;
@@ -176,7 +192,7 @@ int main(int argc, char *argv[])
 	printf("%s%s%s\n", msg, submsg, num);
 	rc = EXIT_FAILURE;
     }
-    free(commandBufferString);
+    free(commandBufferString);		/* @2 */
     free(commandBuffer);		/* @1 */
     return rc;
 }

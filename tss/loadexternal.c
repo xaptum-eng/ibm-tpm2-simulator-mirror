@@ -3,9 +3,8 @@
 /*			   Load External					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: loadexternal.c 1324 2018-08-31 16:36:12Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018					*/
+/* (c) Copyright IBM Corporation 2015 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -56,10 +55,12 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <openssl/evp.h>
-#include <openssl/err.h>
-#include <openssl/pem.h>
-#include <openssl/rsa.h>
+/* Windows 10 crypto API clashes with openssl */
+#ifdef TPM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
@@ -71,7 +72,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -104,14 +105,15 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hi") == 0) {
 	    i++;
 	    if (i < argc) {
 		if (argv[i][0] != 'e' && argv[i][0] != 'o' &&
-		    argv[i][0] != 'p' && argv[i][0] != 'h') {
+		    argv[i][0] != 'p' && argv[i][0] != 'n') {
 		    printUsage();
 		}
 		hierarchyChar = argv[i][0];
@@ -332,7 +334,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -453,6 +455,9 @@ int main(int argc, char *argv[])
 	}
 	in.hierarchy = hierarchy;
     }
+    if (rc == 0) {
+	if (tssUtilsVerbose) TSS_TPMT_PUBLIC_Print(&in.inPublic.publicArea, 0);
+    }
     /* Start a TSS context */
     if (rc == 0) {
 	rc = TSS_Create(&tssContext);
@@ -484,7 +489,7 @@ int main(int argc, char *argv[])
 	    }
 	    printf("\n");
 	}
-	if (verbose) printf("loadexternal: success\n");
+	if (tssUtilsVerbose) printf("loadexternal: success\n");
     }
     else {
 	const char *msg;
@@ -507,7 +512,7 @@ static void printUsage(void)
     printf("\n");
     printf("\t[-hi\thierarchy (e, o, p, n) (default NULL)]\n");
     printf("\t[-nalg\tname hash algorithm (sha1, sha256, sha384, sha512) (default sha256)]\n");
-    printf("\t[-halg (sha1, sha256, sha384, sha512) (default sha256)]\n");
+    printf("\t[-halg\tscheme hash algorithm (sha1, sha256, sha384, sha512) (default sha256)]\n");
     printf("\n");
     printf("\t[Asymmetric Key Algorithm]\n");
     printf("\n");

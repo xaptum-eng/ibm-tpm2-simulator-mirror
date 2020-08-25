@@ -3,9 +3,8 @@ REM #										#
 REM #			TPM2 regression test					#
 REM #			     Written by Ken Goldman				#
 REM #		       IBM Thomas J. Watson Research Center			#
-REM #		$Id: teststorage.bat 1278 2018-07-23 21:20:42Z kgoldman $	#
 REM #										#
-REM # (c) Copyright IBM Corporation 2015, 2018					#
+REM # (c) Copyright IBM Corporation 2015 - 2020					#
 REM # 										#
 REM # All rights reserved.							#
 REM # 										#
@@ -47,8 +46,8 @@ echo ""
 echo "RSA Storage key"
 echo ""
 
-echo "Load RSA the storage key 80000001 under the primary key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+echo "Load the RSA storage key 80000001 under the primary key"
+%TPM_EXE_PATH%load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -88,7 +87,7 @@ for %%N in (%ITERATE_ALGS%) do (
         )
     
         echo "Load external just the storage key public part 80000002 %%N"
-        %TPM_EXE_PATH%loadexternal -halg sha256 -nalg %%N -ipu storepub.bin > run.out
+        %TPM_EXE_PATH%loadexternal -halg sha256 -nalg %%N -ipu storersa2048pub.bin > run.out
         IF !ERRORLEVEL! NEQ 0 (
            exit /B 1
         )
@@ -123,70 +122,74 @@ echo ""
 echo "ECC Storage key"
 echo ""
 
-echo "Load ECC the storage key 80000001 under the primary key 80000000"
-%TPM_EXE_PATH%load -hp 80000000 -ipr storeeccpriv.bin -ipu storeeccpub.bin -pwdp sto > run.out
-IF !ERRORLEVEL! NEQ 0 (
-   exit /B 1
-)
+for %%C in (nistp256 nistp384) do (
 
-for %%N in (%ITERATE_ALGS%) do (
+    echo "Load the ECC storage key 80000001 under the primary key 80000000"
+    %TPM_EXE_PATH%load -hp 80000000 -ipr storeecc%%Cpriv.bin -ipu storeecc%%Cpub.bin -pwdp sto > run.out
+    IF !ERRORLEVEL! NEQ 0 (
+        exit /B 1
+    )
 
-    for %%S in ("" "-se0 02000000 1") do (
+    for %%N in (%ITERATE_ALGS%) do (
 
-	echo "Create an unrestricted signing key under the ECC storage key 80000001 %%N %%~S"
-	%TPM_EXE_PATH%create -hp 80000001 -si -kt f -kt p -ecc nistp256 -opr tmppriv.bin -opu tmppub.bin -pwdp sto -pwdk 111 -nalg %%N %%~S > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+        for %%S in ("" "-se0 02000000 1") do (
 
-	echo "Load the ECC signing key 80000002 under the ECC storage key 80000001 %%~S"
-	%TPM_EXE_PATH%load -hp 80000001 -ipr tmppriv.bin -ipu tmppub.bin -pwdp sto %%~S> run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+	    echo "Create an unrestricted %%C signing key under the ECC storage key 80000001 %%N %%~S"
+	    %TPM_EXE_PATH%create -hp 80000001 -si -kt f -kt p -ecc %%C -opr tmppriv.bin -opu tmppub.bin -pwdp sto -pwdk 111 -nalg %%N %%~S > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1
+	    )
 
-	echo "Read the signing key 80000002 public area"
-	%TPM_EXE_PATH%readpublic -ho 80000002 -opu tmppub2.bin > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+	    echo "Load the ECC signing key 80000002 under the ECC storage key 80000001 %%~S"
+	    %TPM_EXE_PATH%load -hp 80000001 -ipr tmppriv.bin -ipu tmppub.bin -pwdp sto %%~S> run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1
+	    )
 
-	echo "Flush the signing key 80000002"
-	%TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+	    echo "Read the signing key 80000002 public area"
+	    %TPM_EXE_PATH%readpublic -ho 80000002 -opu tmppub2.bin > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1z
+	    )
 
-	echo "Load external, storage key public part 80000002 %%N"
-	%TPM_EXE_PATH%loadexternal -halg sha256 -nalg %%N -ipu storeeccpub.bin > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+	    echo "Flush the signing key 80000002"
+	    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   		exit /B 1
+	    )
 
-	echo "Flush the public key 80000002"
-	%TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+	    echo "Load external, %%C storage key public part 80000002 %%N"
+	    %TPM_EXE_PATH%loadexternal -halg sha256 -nalg %%N -ipu storeecc%%Cpub.bin > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1
+	    )
 
-	echo "Load external, signing key public part 80000002 %%N"
-	%TPM_EXE_PATH%loadexternal -halg sha256 -nalg %%N -ipu tmppub2.bin > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
-	)
+	    echo "Flush the public key 80000002"
+	    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1
+	    )
 
-	echo "Flush the signing key 80000002"
-	%TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
-	IF !ERRORLEVEL! NEQ 0 (
-   	    exit /B 1
+	    echo "Load external, signing key public part 80000002 %%N"
+	    %TPM_EXE_PATH%loadexternal -halg sha256 -nalg %%N -ipu tmppub2.bin > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1
+	    )
+
+	    echo "Flush the signing key 80000002"
+	    %TPM_EXE_PATH%flushcontext -ha 80000002 > run.out
+	    IF !ERRORLEVEL! NEQ 0 (
+   	        exit /B 1
+	    )
 	)
     )
+
+    echo "Flush the ECC storage key 80000001 "
+    %TPM_EXE_PATH%flushcontext -ha 80000001 > run.out
+        IF !ERRORLEVEL! NEQ 0 (
+    exit /B 1
 )
 
-echo "Flush the ECC storage key 80000001 "
-%TPM_EXE_PATH%flushcontext -ha 80000001 > run.out
-IF !ERRORLEVEL! NEQ 0 (
-    exit /B 1
 )
 
 echo "Flush the auth session"

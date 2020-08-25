@@ -6,9 +6,8 @@
 #			TPM2 regression test					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#		$Id: testpolicy.sh 1317 2018-08-29 18:14:51Z kgoldman $		#
 #										#
-# (c) Copyright IBM Corporation 2015 - 2018					#
+# (c) Copyright IBM Corporation 2015 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -330,7 +329,7 @@ do
     checkSuccess $?
 
     echo "Sign a test message with openssl - $HALG"
-    openssl dgst -$HALG -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin msg.bin
+    openssl dgst -$HALG -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin msg.bin > run.out 2>&1
 
     echo "Verify the signature with 80000001 - $HALG"
     ${PREFIX}verifysignature -hk 80000001 -halg $HALG -if msg.bin -is pssig.bin -raw > run.out
@@ -369,7 +368,7 @@ do
     checkSuccess $?
 
     echo "Sign just expiration (uint32_t 4 zeros) with openssl - $HALG"
-    openssl dgst -$HALG -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/zero4.bin
+    openssl dgst -$HALG -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/zero4.bin > run.out 2>&1
 
     echo "Policy signed, signature generated externally - $HALG"
     ${PREFIX}policysigned -hk 80000001 -ha 03000000 -halg $HALG -is pssig.bin > run.out
@@ -676,7 +675,7 @@ ${PREFIX}policygetdigest -ha 03000000 > run.out
 checkSuccess $?
 
 echo "Openssl generate and sign aHash (empty policyRef)"
-openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/policyccsign.bin
+openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/policyccsign.bin > run.out 2>&1
 
 echo "Verify the signature to generate ticket 80000001"
 ${PREFIX}verifysignature -hk 80000001 -halg sha256 -if policies/policyccsign.bin -is pssig.bin -raw -tk tkt.bin > run.out
@@ -821,7 +820,7 @@ echo ""
 # 0000017f000000010004030000016768033e216468247bd031a0a2d9876d79818f8f
 
 # convert to binary policy
-# > policymaker -halg sha1 -if policypcr.txt -of policypcr.bin -pr -v
+# > policymaker -halg sha1 -if policies/policypcr.txt -of policies/policypcr.bin -pr -v
 
 # 85 33 11 83 19 03 12 f5 e8 3c 60 43 34 6f 9f 37
 # 21 04 76 8e
@@ -904,8 +903,8 @@ checkSuccess $?
 #
 # policynvargs.txt (binary)
 # args = hash of 0000 0000 0000 0000 | 0000 | 0000 (eight bytes of zero | offset | op ==)
-# hash -hi n -halg sha1 -if policynvargs.txt -v
-# openssl dgst -sha1 policynvargs.txt
+# hash -hi n -halg sha1 -if policies/policynvargs.txt -v
+# openssl dgst -sha1 policies/policynvargs.txt
 # 2c513f149e737ec4063fc1d37aee9beabc4b4bbf
 #
 # NV authorizing index
@@ -918,7 +917,7 @@ checkSuccess $?
 # append Name to policynvnv.txt
 #
 # convert to binary policy
-# > policymaker -halg sha1 -if policynvnv.txt -of policynvnv.bin -pr -v
+# > policymaker -halg sha1 -if policies/policynvnv.txt -of policies/policynvnv.bin -pr -v
 # bc 9b 4c 4f 7b 00 66 19 5b 1d d9 9c 92 7e ad 57 e7 1c 2a fc 
 #
 # file zero8.bin has 8 bytes of hex zero
@@ -1223,7 +1222,7 @@ ${PREFIX}policygetdigest -ha 03000000 > run.out
 checkSuccess $?
 
 echo "Sign aHash with openssl 8813 6530 ..."
-openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out sig.bin policies/nvwriteahasha.bin
+openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out sig.bin policies/nvwriteahasha.bin > run.out 2>&1
 echo ""
 
 echo "Policy signed, signature generated externally"
@@ -1286,7 +1285,7 @@ ${PREFIX}policygetdigest -ha 03000000 > run.out
 checkSuccess $?
 
 echo "Sign aHash with openssl 3700 0a91 ..."
-openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out sig.bin policies/nvwriteahashb.bin > run.out
+openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out sig.bin policies/nvwriteahashb.bin > run.out 2>&1
 echo ""
 
 echo "Policy signed, signature generated externally"
@@ -1332,7 +1331,7 @@ checkSuccess $?
 # cpHash is
 # b5f919bbc01f0ebad02010169a67a8c158ec12f3
 # append to policycphash.txt 00000163 + cpHash
-# policymaker -halg sha1 -if policycphash.txt -of policycphash.bin -pr
+# policymaker -halg sha1 -if policies/policycphash.txt -of policies/policycphash.bin -pr
 #  06 e4 6c f9 f3 c7 0f 30 10 18 7c a6 72 69 b0 84 b4 52 11 6f 
 
 echo ""
@@ -1523,7 +1522,7 @@ ${PREFIX}flushcontext -ha 80000002 > run.out
 checkSuccess $?
 
 echo "Openssl generate and sign aHash (empty policyRef)"
-openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/policydupsel-yes.bin
+openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/policydupsel-yes.bin > run.out 2>&1
 
 echo "Load external just the public part of PEM authorizing key 80000002"
 ${PREFIX}loadexternal -hi p -halg sha256 -nalg sha256 -ipem policies/rsapubkey.pem > run.out
@@ -1642,7 +1641,7 @@ ${PREFIX}policygetdigest -ha 03000000 > run.out
 checkSuccess $?
 
 echo "Openssl generate and sign aHash (empty policyRef)"
-openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/policynamehash.bin
+openssl dgst -sha256 -sign policies/rsaprivkey.pem -passin pass:rrrr -out pssig.bin policies/policynamehash.bin > run.out 2>&1
 
 echo "Load external just the public part of PEM authorizing key 80000002"
 ${PREFIX}loadexternal -hi p -halg sha256 -nalg sha256 -ipem policies/rsapubkey.pem > run.out
@@ -1679,19 +1678,12 @@ checkSuccess $?
 # test using clockrateadjust and platform policy
 
 # operand A time is 64 bits at offset 0, operation GT (2)
-# policycountertimerargs.txt (binary)
-# args = hash of operandB | offset | operation
-# 0000 0000 0000 0000 | 0000 | 0002
-# hash -hi n -halg sha1 -if policycountertimerargs.txt -v
-# openssl dgst -sha1 policycountertimerargs.txt
-# 7a5836fe287e11ac39ee88d3c0794916d50b73c3
+# 0000016d 0000 0000 0000 0000 | 0000 | 0002
 # 
-# policycountertimer.txt 
-# policy CC_PolicyCounterTimer || args
-# 0000016d + args
 # convert to binary policy
-# > policymaker -halg sha1 -if policycountertimer.txt -of policycountertimer.bin -pr -v
-# e6 84 81 27 55 c0 39 d3 68 63 21 c8 93 50 25 dd aa 26 42 9a 
+# > policymaker -halg sha1 -if policies/policycountertimer.txt -of policies/policycountertimer.bin -pr -v
+# e6 84 81 27 55 c0 39 d3 68 63 21 c8 93 50 25 dd 
+# aa 26 42 9a 
 
 echo ""
 echo "Policy Counter Timer"
@@ -1741,15 +1733,15 @@ checkSuccess $?
 # policyccsign.txt  0000016c 0000015d (policy command code | sign)
 # policyccquote.txt 0000016c 00000158 (policy command code | quote)
 #
-# > policymaker -if policyccsign.txt -of policyccsign.bin -pr -v
+# > policymaker -if policies/policyccsign.txt -of policies/policyccsign.bin -pr -v
 # cc6918b226273b08f5bd406d7f10cf160f0a7d13dfd83b7770ccbcd1aa80d811
 #
-# > policymaker -if policyccquote.txt -of policyccquote.bin -pr -v
+# > policymaker -if policies/policyccquote.txt -of policies/policyccquote.bin -pr -v
 # a039cad5fe68870688f8233c3e3ee3cf27aac9e2efe3486aeb4e304c0e90cd27
 #
 # policyor.txt is CC_PolicyOR || digests
 # 00000171 | cc69 ... | a039 ...
-# > policymaker -if policyor.txt -of policyor.bin -pr -v
+# > policymaker -if  policies/policyor.txt -of  policies/policyor.bin -pr -v
 # 6b fe c2 3a be 57 b0 2a ce 39 dd 13 bb 60 fa 39 
 # 4d ac 7b 38 96 56 57 84 b3 73 fc 61 92 94 29 db 
 
@@ -1853,20 +1845,189 @@ echo "Flush signing key"
 ${PREFIX}flushcontext -ha 80000001 > run.out
 checkSuccess $?
 
-rm -f tmppol.bin
-rm -r tmppriv.bin
-rm -r tmppub.bin
-rm -f tmpstpub.bin
-rm -f tmpstpriv.bin
-rm -f tmpsipub.bin
-rm -f tmpsipriv.bin
+# There are times that a policy creator has TPM, PEM, or DER format
+# information, but does not have access to a TPM.  The publicname
+# utility accepts these inputs and outputs the name in the 'no spaces'
+# format suitable for pasting into a policy.
+
+echo ""
+echo "publicname RSA"
+echo ""
+
+for HALG in ${ITERATE_ALGS}
+do
+
+    echo "Create an rsa ${HALG} key under the primary key"
+    ${PREFIX}create -hp 80000000 -rsa 2048 -nalg ${HALG} -si -opr tmppriv.bin -opu tmppub.bin -pwdp sto > run.out
+    checkSuccess $?
+
+    echo "Load the rsa ${HALG} key 80000001"
+    ${PREFIX}load -hp 80000000 -ipr tmppriv.bin -ipu tmppub.bin -pwdp sto > run.out
+    checkSuccess $?
+
+    echo "Compute the TPM2B_PUBLIC Name"
+    ${PREFIX}publicname -ipu tmppub.bin -on tmp.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the TPM2B_PUBLIC result"
+    diff tmp.bin h80000001.bin > run.out
+    checkSuccess $?
+
+    echo "Convert the rsa public key to PEM format"
+    ${PREFIX}readpublic -ho 80000001 -opem tmppub.pem > run.out
+    checkSuccess $?
+
+    echo "Flush the rsa ${HALG} key"
+    ${PREFIX}flushcontext -ha 80000001 > run.out
+    checkSuccess $?
+
+    echo "loadexternal the rsa PEM public key"
+    ${PREFIX}loadexternal -ipem tmppub.pem -si -rsa -nalg ${HALG} -halg ${HALG} -scheme rsassa > run.out
+    checkSuccess $?
+
+    echo "Compute the PEM Name"
+    ${PREFIX}publicname -ipem tmppub.pem -rsa -si -nalg ${HALG} -halg ${HALG} -on tmp.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the PEM result"
+    diff tmp.bin h80000001.bin > run.out
+    checkSuccess $?
+
+    echo "Convert the TPM PEM key to DER"
+    openssl pkey -inform pem -outform der -in tmppub.pem -out tmppub.der -pubin > run.out 2>&1
+    echo "INFO:"
+
+    echo "Compute the DER Name"
+    ${PREFIX}publicname -ider tmppub.der -rsa -si -nalg ${HALG} -halg ${HALG} -on tmp.bin -v > run.out
+    checkSuccess $?
+
+    echo "Verify the DER result"
+    diff tmp.bin h80000001.bin > run.out
+    checkSuccess $?
+
+    echo "Flush the rsa ${HALG} key"
+    ${PREFIX}flushcontext -ha 80000001 > run.out
+    checkSuccess $?
+
+done
+
+echo ""
+echo "publicname ECC"
+echo ""
+
+for CURVE in nistp256 nistp384
+do
+
+    for HALG in ${ITERATE_ALGS}
+    do
+
+	echo "Create an ecc ${CURVE} ${HALG} key under the primary key"
+	${PREFIX}create -hp 80000000 -ecc ${CURVE} -nalg ${HALG} -si -opr tmppriv.bin -opu tmppub.bin -pwdp sto > run.out
+	checkSuccess $?
+
+	echo "Load the ecc ${CURVE} ${HALG} key 80000001"
+	${PREFIX}load -hp 80000000 -ipr tmppriv.bin -ipu tmppub.bin -pwdp sto > run.out
+	checkSuccess $?
+
+	echo "Compute the TPM2B_PUBLIC Name"
+	${PREFIX}publicname -ipu tmppub.bin -on tmp.bin > run.out
+	checkSuccess $?
+
+	echo "Verify the TPM2B_PUBLIC result"
+	diff tmp.bin h80000001.bin > run.out
+	checkSuccess $?
+
+	echo "Convert the ecc ${CURVE} public key to PEM format"
+	${PREFIX}readpublic -ho 80000001 -opem tmppub.pem > run.out
+	checkSuccess $?
+
+	echo "Flush the ecc ${CURVE} ${HALG} key"
+	${PREFIX}flushcontext -ha 80000001 > run.out
+	checkSuccess $?
+
+	echo "loadexternal the ecc ${CURVE} PEM public key"
+	${PREFIX}loadexternal -ipem tmppub.pem -si -ecc -nalg ${HALG} -halg ${HALG} > run.out
+	checkSuccess $?
+
+	echo "Compute the PEM Name"
+	${PREFIX}publicname -ipem tmppub.pem -ecc -si -nalg ${HALG} -halg ${HALG} -on tmp.bin > run.out
+	checkSuccess $?
+
+	echo "Verify the PEM result"
+	diff tmp.bin h80000001.bin > run.out
+	checkSuccess $?
+
+	echo "Convert the TPM PEM key to DER"
+	openssl pkey -inform pem -outform der -in tmppub.pem -out tmppub.der -pubin -pubout > run.out 2>&1
+	echo "INFO:"
+
+	echo "Compute the DER Name"
+	${PREFIX}publicname -ider tmppub.der -ecc -si -nalg ${HALG} -halg ${HALG} -on tmp.bin -v > run.out
+	checkSuccess $?
+
+	echo "Verify the DER result"
+	diff tmp.bin h80000001.bin > run.out
+	checkSuccess $?
+
+	echo "Flush the ecc ${CURVE} ${HALG} key"
+	${PREFIX}flushcontext -ha 80000001 > run.out
+	checkSuccess $?
+
+    done
+done
+
+echo ""
+echo "publicname NV"
+echo ""
+
+for HALG in ${ITERATE_ALGS}
+do
+
+    echo "NV Define Space ${HALG}"
+    ${PREFIX}nvdefinespace -hi o -ha 01000000 -sz 16 -nalg ${HALG} > run.out
+    checkSuccess $?
+
+    echo "NV Read Public"
+    ${PREFIX}nvreadpublic -ha 01000000 -opu tmppub.bin -on tmpname.bin > run.out
+    checkSuccess $?
+
+    echo "Compute the NV Index Name"
+    ${PREFIX}publicname -invpu tmppub.bin -on tmp.bin > run.out
+    checkSuccess $?
+
+    echo "Verify the NV Index result"
+    diff tmp.bin tmpname.bin > run.out
+    checkSuccess $?
+
+    echo "NV Undefine Space"
+    ${PREFIX}nvundefinespace -hi o -ha 01000000 > run.out
+    checkSuccess $?
+
+done
+
+# cleanup
+
 rm -f pssig.bin
-rm -f tkt.bin
-rm -f tmpdup.bin
-rm -f tmpss.bin
-rm -f tmpsipriv1.bin
-rm -f tmpsig.bin
 rm -f run.out
+rm -f sig.bin
+rm -f tkt.bin
+rm -f tmp.bin
+rm -f tmpdup.bin
+rm -f tmphkey.bin
+rm -f tmpname.bin
+rm -f tmppol.bin
+rm -f tmppriv.bin
+rm -f tmppriv.bin 
+rm -f tmppub.bin
+rm -f tmppub.der
+rm -f tmppub.pem
+rm -f tmpsig.bin
+rm -f tmpsipriv.bin
+rm -f tmpsipriv1.bin
+rm -f tmpsipub.bin
+rm -f tmpss.bin
+rm -f tmpstpriv.bin
+rm -f tmpstpub.bin
 
 # ${PREFIX}getcapability -cap 1 -pr 80000000
 # ${PREFIX}getcapability -cap 1 -pr 01000000

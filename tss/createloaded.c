@@ -3,9 +3,8 @@
 /*			    Create Loaded					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: createloaded.c 1294 2018-08-09 19:08:34Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -56,7 +55,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -74,6 +73,7 @@ int main(int argc, char *argv[])
     uint32_t 			keyTypeSpecified = 0;
     int				rev116 = FALSE;
     TPMI_ALG_PUBLIC 		algPublic = TPM_ALG_RSA;
+    TPMI_RSA_KEY_BITS 		keyBits = 2048;
     TPMI_ECC_CURVE		curveID = TPM_ECC_NONE;
     TPMI_ALG_HASH		halg = TPM_ALG_SHA256;
     TPMI_ALG_HASH		nalg = TPM_ALG_SHA256;
@@ -93,7 +93,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     addObjectAttributes.val = 0;
     addObjectAttributes.val |= TPMA_OBJECT_NODA;
@@ -122,6 +123,10 @@ int main(int argc, char *argv[])
 	    keyType = TYPE_DEO;
 	    keyTypeSpecified++;
 	}
+	else if (strcmp(argv[i], "-dee") == 0) {
+	    keyType = TYPE_DEE;
+	    keyTypeSpecified++;
+	}
 	else if (strcmp(argv[i], "-des") == 0) {
 	    keyType = TYPE_DES;
 	    keyTypeSpecified++;
@@ -142,6 +147,10 @@ int main(int argc, char *argv[])
 	    keyType = TYPE_KH;
 	    keyTypeSpecified++;
 	}
+	else if (strcmp(argv[i], "-khr") == 0) {
+	    keyType = TYPE_KHR;
+	    keyTypeSpecified++;
+	}
 	else if (strcmp(argv[i], "-dp") == 0) {
 	    keyType = TYPE_DP;
 	    keyTypeSpecified++;
@@ -158,6 +167,14 @@ int main(int argc, char *argv[])
 	}
 	else if (strcmp(argv[i], "-rsa") == 0) {
 	    algPublic = TPM_ALG_RSA;
+	    i++;
+	    if (i < argc) {
+		sscanf(argv[i],"%hu", &keyBits);
+	    }
+	    else {
+		printf("Missing parameter for -rsa\n");
+		printUsage();
+	    }
 	}
 	else if (strcmp(argv[i], "-ecc") == 0) {
 	    algPublic = TPM_ALG_ECC;
@@ -185,16 +202,26 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[i], "-kt") == 0) {
 	    i++;
 	    if (i < argc) {
-		switch (argv[i][0]) {
-		  case 'f':
-		    addObjectAttributes.val |= TPMA_OBJECT_FIXEDTPM;
-		    break;
-		  case 'p':
-		    addObjectAttributes.val |= TPMA_OBJECT_FIXEDPARENT;
-		    break;
-		  default:
-		    printf("Bad parameter %c for -kt\n", argv[i][0]);
-		    printUsage();
+		if (i < argc) {
+		    if (strcmp(argv[i], "f") == 0) {
+			addObjectAttributes.val |= TPMA_OBJECT_FIXEDTPM;
+		    }
+		    else if (strcmp(argv[i], "p") == 0) {
+			addObjectAttributes.val |= TPMA_OBJECT_FIXEDPARENT;
+		    }
+		    else if (strcmp(argv[i], "nf") == 0) {
+			deleteObjectAttributes.val |= TPMA_OBJECT_FIXEDTPM;
+		    }
+		    else if (strcmp(argv[i], "np")  == 0) {
+			deleteObjectAttributes.val |= TPMA_OBJECT_FIXEDPARENT;
+		    }
+		    else if (strcmp(argv[i], "ed")  == 0) {
+			addObjectAttributes.val |= TPMA_OBJECT_ENCRYPTEDDUPLICATION;
+		    }
+		    else {
+			printf("Bad parameter %c for -kt\n", argv[i][0]);
+			printUsage();
+		    }
 		}
 	    }
 	    else {
@@ -392,7 +419,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -418,6 +445,7 @@ int main(int argc, char *argv[])
       case TYPE_ST:
       case TYPE_DEN:
       case TYPE_DEO:
+      case TYPE_DEE:
       case TYPE_SI:
       case TYPE_SIR:
       case TYPE_GP:
@@ -427,6 +455,7 @@ int main(int argc, char *argv[])
 	}
       case TYPE_DES:
       case TYPE_KH:
+      case TYPE_KHR:
       case TYPE_DP:
 	/* inSensitive optional for symmetric keys */
 	break;
@@ -470,12 +499,13 @@ int main(int argc, char *argv[])
 	  case TYPE_ST:
 	  case TYPE_DEN:
 	  case TYPE_DEO:
+	  case TYPE_DEE:
 	  case TYPE_SI:
 	  case TYPE_SIR:
 	  case TYPE_GP:
 	    rc = asymPublicTemplate(&publicArea,
 				    addObjectAttributes, deleteObjectAttributes,
-				    keyType, algPublic, curveID, nalg, halg,
+				    keyType, algPublic, keyBits, curveID, nalg, halg,
 				    policyFilename);
 	    break;
 	  case TYPE_DES:
@@ -485,9 +515,10 @@ int main(int argc, char *argv[])
 					 policyFilename);
 	    break;
 	  case TYPE_KH:
+	  case TYPE_KHR:
 	    rc = keyedHashPublicTemplate(&publicArea,
 					 addObjectAttributes, deleteObjectAttributes,
-					 nalg, halg,
+					 keyType, nalg, halg,
 					 policyFilename);
 	    break;
 	  case TYPE_DP:
@@ -543,13 +574,13 @@ int main(int argc, char *argv[])
     /* save the private key */
     if ((rc == 0) && (privateKeyFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.outPrivate,
-				     (MarshalFunction_t)TSS_TPM2B_PRIVATE_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_PRIVATE_Marshalu,
 				     privateKeyFilename);
     }
     /* save the public key */
     if ((rc == 0) && (publicKeyFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.outPublic,
-				     (MarshalFunction_t)TSS_TPM2B_PUBLIC_Marshal,
+				     (MarshalFunction_t)TSS_TPM2B_PUBLIC_Marshalu,
 				     publicKeyFilename);
     }
     /* save the optional PEM public key */
@@ -559,7 +590,7 @@ int main(int argc, char *argv[])
     }
     if (rc == 0) {
 	printf("Handle %08x\n", out.objectHandle);
-	if (verbose) printf("createloaded: success\n");
+	if (tssUtilsVerbose) printf("createloaded: success\n");
     }
     else {
 	const char *msg;

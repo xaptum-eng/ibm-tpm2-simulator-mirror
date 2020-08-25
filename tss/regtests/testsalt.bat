@@ -3,9 +3,8 @@ REM #										#
 REM #			TPM2 regression test					#
 REM #			     Written by Ken Goldman				#
 REM #		       IBM Thomas J. Watson Research Center			#
-REM #		$Id: testsalt.bat 1278 2018-07-23 21:20:42Z kgoldman $		#
 REM #										#
-REM # (c) Copyright IBM Corporation 2015, 2018					#
+REM # (c) Copyright IBM Corporation 2015 - 2020					#
 REM # 										#
 REM # All rights reserved.							#
 REM # 										#
@@ -44,7 +43,7 @@ echo ""
 echo "Salt Session - Load"
 echo ""
 
-for %%A in ("-rsa" "-ecc nistp256") do (
+for %%A in ("-rsa 2048" "-rsa 3072" "-ecc nistp256" "-ecc nistp384") do (
 
     for %%H in (%ITERATE_ALGS%) do (
 
@@ -227,7 +226,7 @@ echo "Salt Session - EvictControl"
 echo ""
 
 echo "Load the storage key"
-%TPM_EXE_PATH%load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -267,7 +266,7 @@ echo "Salt Session - ContextSave and ContextLoad"
 echo ""
 
 echo "Load the storage key at 80000001"
-%TPM_EXE_PATH%load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -313,7 +312,7 @@ echo "Salt Audit Session - PCR Read, Read Public, NV Read Public"
 echo ""
 
 echo "Load the storage key at 80000001"
-%TPM_EXE_PATH%load -hp 80000000 -ipr storepriv.bin -ipu storepub.bin -pwdp sto > run.out
+%TPM_EXE_PATH%load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )
@@ -362,6 +361,63 @@ IF !ERRORLEVEL! NEQ 0 (
 
 echo "NV undefine space"
 %TPM_EXE_PATH%nvundefinespace -ha 01000000 -hi p > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+
+echo ""
+echo "Salt Policy Session with policyauthvalue"
+echo ""
+
+echo "Load the RSA storage key 80000001 under the primary key 80000000"
+%TPM_EXE_PATH%load -hp 80000000 -ipr storersa2048priv.bin -ipu storersa2048pub.bin -pwdp sto > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Start a salted policy session"
+%TPM_EXE_PATH%startauthsession -se p -hs 80000001 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Policy command code - create"
+%TPM_EXE_PATH%policycommandcode -ha 03000000 -cc 153 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Policy authvalue"
+%TPM_EXE_PATH%policyauthvalue -ha 03000000 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Create a signing key using the salt"
+%TPM_EXE_PATH%create -hp 80000001 -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -pwdp sto -se0 03000000 0 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Flush the storage key 80000001"
+%TPM_EXE_PATH%flushcontext -ha 80000001 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo ""
+echo "Salt Policy Session with no policyauthvalue"
+echo ""
+
+echo "Start a salted policy session"
+%TPM_EXE_PATH%startauthsession -se p -hs 80000000 > run.out
+IF !ERRORLEVEL! NEQ 0 (
+   exit /B 1
+)
+
+echo "Create a signing key using the salt"
+%TPM_EXE_PATH%create -hp 80000000 -si -kt f -kt p -opr tmppriv.bin -opu tmppub.bin -se0 03000000 0 > run.out
 IF !ERRORLEVEL! NEQ 0 (
    exit /B 1
 )

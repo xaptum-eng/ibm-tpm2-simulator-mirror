@@ -3,9 +3,8 @@
 #		Linux TPM2 Utilities Makefile					#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	      $Id: makefiletpm20 1328 2018-09-04 15:08:15Z kgoldman $		#
 #										#
-# (c) Copyright IBM Corporation 2014, 2018					#
+# (c) Copyright IBM Corporation 2014 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -99,12 +98,12 @@ LNLLIBS += -lcrypto
 # hardening flags for linking executables
 LNAFLAGS += -pie -Wl,-z,now -Wl,-rpath,.
 
-LNALIBS +=  -libmtssutils -libmtss -lcrypto
+LNALIBS +=  -libmtssutils -libmtss
 
 # shared library
 
 # versioned shared library
-LIBTSSVERSIONED=libibmtss.so.1.1
+LIBTSSVERSIONED=libibmtss.so.1.5
 
 # soname field of the shared library
 # which will be made symbolic link to the versioned shared library
@@ -123,7 +122,7 @@ endif
 
 # TSS utilities shared library
 
-LIBTSSUTILSVERSIONED=libibmtssutils.so.1.1
+LIBTSSUTILSVERSIONED=libibmtssutils.so.1.5
 LIBTSSUTILSSONAME=libibmtssutils.so.1
 LIBTSSUTILS=libibmtssutils.so
 
@@ -259,6 +258,8 @@ certify:		ibmtss/tss.h certify.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) certify.o $(LNALIBS) -o certify
 certifycreation:	ibmtss/tss.h certifycreation.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) certifycreation.o $(LNALIBS) -o certifycreation
+certifyx509:		ibmtss/tss.h certifyx509.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) certifyx509.o $(LNALIBS) -lcrypto -o certifyx509
 changeeps:		ibmtss/tss.h changeeps.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) changeeps.o $(LNALIBS) -o changeeps
 changepps:		ibmtss/tss.h changepps.o $(LIBTSS) $(LIBTSSUTILS)
@@ -439,6 +440,8 @@ sequencecomplete:	ibmtss/tss.h sequencecomplete.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) sequencecomplete.o $(LNALIBS) -o sequencecomplete
 setprimarypolicy:	ibmtss/tss.h setprimarypolicy.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) setprimarypolicy.o $(LNALIBS) -o setprimarypolicy
+setcommandcodeauditstatus:	ibmtss/tss.h setcommandcodeauditstatus.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) setcommandcodeauditstatus.o $(LNALIBS) -o setcommandcodeauditstatus
 shutdown:		ibmtss/tss.h shutdown.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) shutdown.o $(LNALIBS) -o shutdown
 sign:			ibmtss/tss.h sign.o $(LIBTSS) $(LIBTSSUTILS)
@@ -475,6 +478,14 @@ ntc2preconfig:		ntc2preconfig.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) ntc2preconfig.o $(LNALIBS) -o ntc2preconfig
 ntc2lockconfig:		ntc2lockconfig.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) ntc2lockconfig.o $(LNALIBS) -o ntc2lockconfig
+publicname:		publicname.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) publicname.o $(LNALIBS) -o publicname
+getcryptolibrary:	getcryptolibrary.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) getcryptolibrary.o $(LNALIBS) -o getcryptolibrary
+printattr:		printattr.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) printattr.o $(LNALIBS) -o printattr
+tpmcmd:			tpmcmd.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) tpmcmd.o $(LNALIBS) -o tpmcmd
 
 # for applications, not for TSS library
 

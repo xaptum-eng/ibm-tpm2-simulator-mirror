@@ -3,9 +3,8 @@
 /*			 TSS Marshal and Unmarshal    				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tssmarshal.c 1303 2018-08-20 16:49:52Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -803,6 +802,27 @@ TSS_CertifyCreation_In_Marshalu(const CertifyCreation_In *source, uint16_t *writ
     return rc;
 }
 TPM_RC
+TSS_CertifyX509_In_Marshalu(const CertifyX509_In *source, uint16_t *written, BYTE **buffer, uint32_t *size)
+{
+    TPM_RC rc = 0;
+    if (rc == 0) {
+	rc = TSS_TPMI_DH_OBJECT_Marshalu(&source->objectHandle, written, buffer, size);
+    }
+    if (rc == 0) {
+	rc = TSS_TPMI_DH_OBJECT_Marshalu(&source->signHandle, written, buffer, size);
+    }
+    if (rc == 0) {
+	rc = TSS_TPM2B_DATA_Marshalu(&source->reserved, written, buffer, size);
+    }
+    if (rc == 0) {
+	rc = TSS_TPMT_SIG_SCHEME_Marshalu(&source->inScheme, written, buffer, size);
+    }
+    if (rc == 0) {
+	rc = TSS_TPM2B_MAX_BUFFER_Marshalu(&source->partialCertificate, written, buffer, size);
+    }
+    return rc;
+}
+TPM_RC
 TSS_Quote_In_Marshalu(const Quote_In *source, uint16_t *written, BYTE **buffer, uint32_t *size)
 {
     TPM_RC rc = 0;
@@ -1386,7 +1406,7 @@ TSS_SetPrimaryPolicy_In_Marshalu(const SetPrimaryPolicy_In *source, uint16_t *wr
 {
     TPM_RC rc = 0;
     if (rc == 0) {
-	rc = TSS_TPMI_RH_HIERARCHY_AUTH_Marshalu(&source->authHandle, written, buffer, size);
+	rc = TSS_TPMI_RH_HIERARCHY_POLICY_Marshalu(&source->authHandle, written, buffer, size);
     }
     if (rc == 0) {
 	rc = TSS_TPM2B_DIGEST_Marshalu(&source->authPolicy, written, buffer, size);
@@ -2346,6 +2366,27 @@ TSS_CertifyCreation_Out_Unmarshalu(CertifyCreation_Out *target, TPM_ST tag, BYTE
     return rc;
 }
 TPM_RC
+TSS_CertifyX509_Out_Unmarshalu(CertifyX509_Out *target, TPM_ST tag, BYTE **buffer, uint32_t *size)
+{
+    TPM_RC rc = TPM_RC_SUCCESS;
+    uint32_t parameterSize = 0;
+    if (rc == TPM_RC_SUCCESS) {
+	if (tag == TPM_ST_SESSIONS) {
+	    rc = TSS_UINT32_Unmarshalu(&parameterSize, buffer, size);
+	}
+    }
+    if (rc == TPM_RC_SUCCESS) {
+	rc = TSS_TPM2B_MAX_BUFFER_Unmarshalu(&target->addedToCertificate, buffer, size);
+    }
+    if (rc == TPM_RC_SUCCESS) {
+	rc = TSS_TPM2B_DIGEST_Unmarshalu(&target->tbsDigest, buffer, size);
+    }
+    if (rc == TPM_RC_SUCCESS) {
+	rc = TSS_TPMT_SIGNATURE_Unmarshalu(&target->signature, buffer, size, YES);
+    }
+    return rc;
+}
+TPM_RC
 TSS_Quote_Out_Unmarshalu(Quote_Out *target, TPM_ST tag, BYTE **buffer, uint32_t *size)
 {
     TPM_RC rc = TPM_RC_SUCCESS;
@@ -2732,7 +2773,7 @@ TPM_RC
 TSS_NV_Certify_Out_Unmarshalu(NV_Certify_Out *target, TPM_ST tag, BYTE **buffer, uint32_t *size)
 {
     TPM_RC rc = TPM_RC_SUCCESS;
-    uint32_t parameterSize           = 0;
+    uint32_t parameterSize = 0;
     if (rc == TPM_RC_SUCCESS) {
 	if (tag == TPM_ST_SESSIONS) {
 	    rc = TSS_UINT32_Unmarshalu(&parameterSize, buffer, size);
@@ -3154,6 +3195,18 @@ TSS_TPMI_RH_ENABLES_Marshalu(const TPMI_RH_ENABLES *source, uint16_t *written, B
 
 TPM_RC
 TSS_TPMI_RH_HIERARCHY_AUTH_Marshalu(const TPMI_RH_HIERARCHY_AUTH *source, uint16_t *written, BYTE **buffer, uint32_t *size)
+{
+    TPM_RC rc = 0;
+    if (rc == 0) {
+	rc = TSS_TPM_HANDLE_Marshalu(source, written, buffer, size);
+    }
+    return rc;
+}
+
+/* Table 50 - Definition of (TPM_HANDLE) TPMI_RH_HIERARCHY_POLICY Type <IN> */
+
+TPM_RC
+TSS_TPMI_RH_HIERARCHY_POLICY_Marshalu(const TPMI_RH_HIERARCHY_POLICY *source, uint16_t *written, BYTE **buffer, uint32_t *size)
 {
     TPM_RC rc = 0;
     if (rc == 0) {
@@ -4749,6 +4802,8 @@ TSS_TPMT_SIG_SCHEME_Marshalu(const TPMT_SIG_SCHEME *source, uint16_t *written, B
 
 /* Table 146 - Definition of Types for {RSA} Encryption Schemes */
 
+/* NOTE: Marked as const function in header */
+
 TPM_RC
 TSS_TPMS_ENC_SCHEME_OAEP_Marshalu(const TPMS_ENC_SCHEME_OAEP *source, uint16_t *written, BYTE **buffer, uint32_t *size)
 {
@@ -4760,6 +4815,8 @@ TSS_TPMS_ENC_SCHEME_OAEP_Marshalu(const TPMS_ENC_SCHEME_OAEP *source, uint16_t *
 }
 
 /* Table 146 - Definition of Types for {RSA} Encryption Schemes */
+
+/* NOTE: Marked as const function in header */
 
 TPM_RC
 TSS_TPMS_ENC_SCHEME_RSAES_Marshalu(const TPMS_ENC_SCHEME_RSAES *source, uint16_t *written, BYTE **buffer, uint32_t *size)
@@ -5170,10 +5227,10 @@ TSS_TPMS_ALGORITHM_DETAIL_ECC_Marshalu(const TPMS_ALGORITHM_DETAIL_ECC *source, 
 	rc = TSS_UINT16_Marshalu(&source->keySize, written, buffer, size);
     }
     if (rc == 0) {
-	rc = TSS_TPMT_KDF_SCHEME_Marshalu(&source->kdf, written, buffer, size);;
+	rc = TSS_TPMT_KDF_SCHEME_Marshalu(&source->kdf, written, buffer, size);
     }
     if (rc == 0) {
-	rc = TSS_TPMT_ECC_SCHEME_Marshalu(&source->sign, written, buffer, size);;
+	rc = TSS_TPMT_ECC_SCHEME_Marshalu(&source->sign, written, buffer, size);
     }
     if (rc == 0) {
 	rc = TSS_TPM2B_ECC_PARAMETER_Marshalu(&source->p, written, buffer, size);
@@ -5922,6 +5979,8 @@ TSS_TPM2B_CREATION_DATA_Marshalu(const TPM2B_CREATION_DATA *source, uint16_t *wr
     return rc;
 }
 
+#ifndef TPM_TSS_NODEPRECATED
+
 /* Deprecated functions that use a sized value for the size parameter.  The recommended functions
    use an unsigned value.
 
@@ -6587,11 +6646,17 @@ TSS_TPMT_SIG_SCHEME_Marshal(const TPMT_SIG_SCHEME *source, UINT16 *written, BYTE
 {
     return TSS_TPMT_SIG_SCHEME_Marshalu(source, written, buffer, (uint32_t *)size);
 }
+
+/* NOTE: Marked as const function in header */
+
 TPM_RC
 TSS_TPMS_ENC_SCHEME_OAEP_Marshal(const TPMS_ENC_SCHEME_OAEP *source, UINT16 *written, BYTE **buffer, INT32 *size)
 {
     return TSS_TPMS_ENC_SCHEME_OAEP_Marshalu(source, written, buffer, (uint32_t *)size);
 }
+
+/* NOTE: Marked as const function in header */
+
 TPM_RC
 TSS_TPMS_ENC_SCHEME_RSAES_Marshal(const TPMS_ENC_SCHEME_RSAES *source, UINT16 *written, BYTE **buffer, INT32 *size)
 {
@@ -7699,5 +7764,5 @@ TSS_NV_Certify_Out_Unmarshal(NV_Certify_Out *target, TPM_ST tag, BYTE **buffer, 
     return TSS_NV_Certify_Out_Unmarshalu(target, tag, buffer, (uint32_t *)size);
 }
 
-
+#endif	/* TPM_TSS_NODEPRECATED */
 #endif /* TPM 2.0 */

@@ -3,9 +3,8 @@
 /*			    Get Capability	 				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: getcapability.c 1290 2018-08-01 14:45:24Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -53,7 +52,7 @@
 static void printUsage(TPM_CAP capability);
 static TPM_RC printResponse(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -74,7 +73,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-cap") == 0) {
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
 	    printUsage(capability);
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
 	rc = printResponse(&out.capabilityData, property);
     }
     if (rc == 0) {
-	if (verbose) printf("getcapability: success\n");
+	if (tssUtilsVerbose) printf("getcapability: success\n");
     }
     else {
 	const char *msg;
@@ -259,6 +259,7 @@ static void usagePcrs(void);
 static void usageTpmProperties(void);
 static void usagePcrProperties(void);
 static void usageEccCurves(void);
+static void usageAuthPolicies(void);
 
 static TPM_RC responseCapability(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
 static TPM_RC responseAlgs(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
@@ -270,6 +271,7 @@ static TPM_RC responsePcrs(TPMS_CAPABILITY_DATA *capabilityData, uint32_t proper
 static TPM_RC responseTpmProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
 static TPM_RC responsePcrProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
 static TPM_RC responseEccCurves(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
+static TPM_RC responseAuthPolicies(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property);
 
 static const CAPABILITY_TABLE capabilityTable [] = {
     {TPM_CAP_LAST + 1, usageCapability, responseCapability}, 
@@ -281,7 +283,8 @@ static const CAPABILITY_TABLE capabilityTable [] = {
     {TPM_CAP_PCRS, usagePcrs, responsePcrs} ,                
     {TPM_CAP_TPM_PROPERTIES, usageTpmProperties, responseTpmProperties},      
     {TPM_CAP_PCR_PROPERTIES, usagePcrProperties, responsePcrProperties},      
-    {TPM_CAP_ECC_CURVES, usageEccCurves, responseEccCurves}          
+    {TPM_CAP_ECC_CURVES, usageEccCurves, responseEccCurves},          
+    {TPM_CAP_AUTH_POLICIES, usageAuthPolicies, responseAuthPolicies}          
 };
 
 static TPM_RC printResponse(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property)
@@ -468,6 +471,25 @@ static PT_TABLE ptTable [] = {
     {(PT_VAR + 20), "TPM_PT_AUDIT_COUNTER_1 - the low-order 32 bits of the command audit counter"},
 };
 
+static char get8(uint32_t value32, size_t offset);
+static uint16_t get16(uint32_t value32, size_t offset);
+
+/* get8() gets a char from a uint32_t at offset */
+
+static char get8(uint32_t value32, size_t offset)
+{
+    char value8 = (uint8_t)((value32 >> ((3 - offset) * 8)) & 0xff);
+    return value8;
+}
+
+/* get16() gets a uint16_t from a uint32_t at offset */
+
+static uint16_t get16(uint32_t value32, size_t offset)
+{
+    uint16_t value16 = (uint16_t)((value32 >> ((1 - offset) * 16)) & 0xffff);
+    return value16;
+}
+
 static TPM_RC responseTpmProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property)
 {
     TPM_RC		rc = 0;
@@ -490,6 +512,100 @@ static TPM_RC responseTpmProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32
 	    ptText = "PT unknown";
 	}
 	printf("TPM_PT %08x value %08x %s\n", tpmProperty->property, tpmProperty->value, ptText);
+	switch (tpmProperty->property) {
+	    char c;
+	  case TPM_PT_FAMILY_INDICATOR:
+	    printf("\tTPM ");
+	    for (i = 0 ; i < sizeof(uint32_t) ; i++) {
+		c = get8(tpmProperty->value, i);
+		printf("%c", c);
+	    }
+	    printf("\n");
+	    break;
+	  case TPM_PT_REVISION:
+	    printf("\trev %u\n", tpmProperty->value);
+	    break;
+	  case TPM_PT_DAY_OF_YEAR:
+	  case TPM_PT_YEAR:
+	  case TPM_PT_INPUT_BUFFER:
+	  case TPM_PT_ACTIVE_SESSIONS_MAX:
+	  case TPM_PT_PCR_COUNT:
+	  case TPM_PT_NV_INDEX_MAX:
+	  case TPM_PT_CLOCK_UPDATE:
+	  case TPM_PT_CONTEXT_SYM_SIZE:
+	  case TPM_PT_MAX_COMMAND_SIZE:
+	  case TPM_PT_MAX_RESPONSE_SIZE:
+	  case TPM_PT_MAX_DIGEST:
+	  case TPM_PT_MAX_OBJECT_CONTEXT:
+	  case TPM_PT_MAX_SESSION_CONTEXT:
+	  case TPM_PT_PS_DAY_OF_YEAR:
+	  case TPM_PT_PS_YEAR:
+	  case TPM_PT_SPLIT_MAX:
+	  case TPM_PT_TOTAL_COMMANDS:
+	  case TPM_PT_LIBRARY_COMMANDS:
+	  case TPM_PT_VENDOR_COMMANDS:
+	  case TPM_PT_NV_BUFFER_MAX:
+	  case TPM_PT_MAX_CAP_BUFFER:
+	    
+	  case TPM_PT_HR_ACTIVE_AVAIL:
+	  case TPM_PT_HR_PERSISTENT_AVAIL:
+	  case TPM_PT_NV_COUNTERS_AVAIL:
+ 	    printf("\t%u\n", tpmProperty->value);
+	    break;
+	  case TPM_PT_MANUFACTURER:
+	  case TPM_PT_VENDOR_STRING_1:
+	  case TPM_PT_VENDOR_STRING_2:
+	  case TPM_PT_VENDOR_STRING_3:
+	  case TPM_PT_VENDOR_STRING_4:
+	    printf("\t");
+	    for (i = 0 ; i < sizeof(uint32_t) ; i++) {
+		c = get8(tpmProperty->value, i);
+		printf("%c", c);
+	    }
+	    printf("\n");
+	    break;
+	  case TPM_PT_FIRMWARE_VERSION_1:
+	  case TPM_PT_FIRMWARE_VERSION_2:
+	    printf("\t%u.%u\n", get16(tpmProperty->value, 0), get16(tpmProperty->value, 1));
+	    break;
+	  case TPM_PT_PS_REVISION:
+	    printf("\t%u.%u.%u.%u\n",
+		   get8(tpmProperty->value, 0), get8(tpmProperty->value, 1),
+		   get8(tpmProperty->value, 2), get8(tpmProperty->value, 3));
+	    break;
+	  case TPM_PT_CONTEXT_HASH:
+	  case TPM_PT_CONTEXT_SYM:
+	    TSS_TPM_ALG_ID_Print("algorithm", tpmProperty->value, 4);
+	    break;
+	  case TPM_PT_MEMORY:
+	      {
+		  TPMA_MEMORY tmp;
+		  tmp.val = tpmProperty->value;
+		  TSS_TPMA_MEMORY_Print(tmp, 4);
+	      }
+	      break;
+	  case TPM_PT_MODES :
+	      {
+		  TPMA_MODES tmp;
+		  tmp.val = tpmProperty->value;
+		  TSS_TPMA_MODES_Print(tmp, 4);
+	      }
+	      break;
+	  case TPM_PT_PERMANENT:
+	      {
+		  TPMA_PERMANENT tmp;
+		  tmp.val = tpmProperty->value;
+		  TSS_TPMA_PERMANENT_Print(tmp, 4);
+	      }
+	      break;
+	  case TPM_PT_STARTUP_CLEAR:
+	      {
+		  TPMA_STARTUP_CLEAR tmp;
+		  tmp.val = tpmProperty->value;
+		  TSS_TPMA_STARTUP_CLEAR_Print(tmp, 4);
+	      }
+	      break; 
+	}
     }
     return rc;
 }
@@ -533,7 +649,7 @@ static TPM_RC responsePcrProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32
 	const char *ptPcrText = NULL;
 	size_t i;
 	for  (i = 0 ; i < (sizeof(ptPcrTable) / sizeof(PT_PCR_TABLE)) ; i++) {
-	    if (pcrProperty->tag == ptPcrTable[i].ptPcr) {			/* the property identifier */
+	    if (pcrProperty->tag == ptPcrTable[i].ptPcr) {	/* the property identifier */
 		ptPcrText = ptPcrTable[i].ptPcrText;
 		break;
 	    }
@@ -542,7 +658,8 @@ static TPM_RC responsePcrProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32
 	    ptPcrText = "PT unknown";
 	}
 	printf("TPM_PT_PCR %08x %s\n", pcrProperty->tag, ptPcrText);
-	for (i = 0 ; i < pcrProperty->sizeofSelect ; i++) {		/* the size in octets of the pcrSelect array */
+	for (i = 0 ; i < pcrProperty->sizeofSelect ; i++) {	/* the size in octets of the
+								   pcrSelect array */
 	    printf("PCR %u-%u  \tpcrSelect\t%02x\n",
 		   (unsigned int)i*8, (unsigned int)(i*8) + 7,
 		   pcrProperty->pcrSelect[i]); 
@@ -554,9 +671,30 @@ static TPM_RC responsePcrProperties(TPMS_CAPABILITY_DATA *capabilityData, uint32
 static TPM_RC responseEccCurves(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property)
 {
     TPM_RC	rc = 0;
+    uint32_t	count;
+    TPML_ECC_CURVE *eccCurves = (TPML_ECC_CURVE *)&(capabilityData->data);
+    TPM_ECC_CURVE curve;
     property = property;
-    capabilityData = capabilityData;
-    printf("unimplemented\n");
+
+    printf("%u curves\n", eccCurves->count);
+    for (count = 0 ; count < eccCurves->count ; count++) {
+	curve = eccCurves->eccCurves[count];
+	TSS_TPM_ECC_CURVE_Print("", curve, 4);
+    }
+    return rc;
+}
+
+static TPM_RC responseAuthPolicies(TPMS_CAPABILITY_DATA *capabilityData, uint32_t property)
+{
+    TPM_RC	rc = 0;
+    uint32_t	count;
+    TPML_TAGGED_POLICY *authPolicies = (TPML_TAGGED_POLICY *)&(capabilityData->data);
+    property = property;
+
+    printf("%u authPolicies\n", authPolicies->count);
+    for (count = 0 ; count < authPolicies->count ; count++) {
+	TSS_TPMS_TAGGED_POLICY_Print(&authPolicies->policies[count], 4);
+    }
     return rc;
 }
 
@@ -603,6 +741,7 @@ static void usageCapability(void)
 	   "\t\tTPM_CAP_TPM_PROPERTIES      6\n"
 	   "\t\tTPM_CAP_PCR_PROPERTIES      7\n"
 	   "\t\tTPM_CAP_ECC_CURVES          8\n"
+	   "\t\tTPM_CAP_AUTH_POLICIES       9\n"
 	   );
     return;
 }
@@ -669,7 +808,12 @@ static void usagePcrProperties(void)
 
 static void usageEccCurves(void)
 {
-    printf("unimplemented\n");
+    printf("TPM_CAP_ECC_CURVES -pr is the first curve\n");
     return;
 }
 
+static void usageAuthPolicies(void)
+{
+    printf("TPM_CAP_AUTH_POLICIES -pr is the first handle in range 40000000\n");
+    return;
+}

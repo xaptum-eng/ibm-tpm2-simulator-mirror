@@ -3,9 +3,8 @@
 /*			     TSS Library Independent Crypto Support		*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: tsscrypto.c 838 2016-11-22 22:44:57Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015, 2017.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -39,6 +38,8 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
 
 #ifdef TPM_POSIX
 #include <netinet/in.h>
@@ -46,14 +47,6 @@
 #ifdef TPM_WINDOWS
 #include <winsock2.h>
 #endif
-
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/aes.h>
-#include <openssl/rsa.h>
-#include <openssl/rand.h>
-#include <openssl/engine.h>
 
 #include <ibmtss/tssresponsecode.h>
 #include <ibmtss/tssutils.h>
@@ -277,57 +270,40 @@ TPM_RC TSS_Hash_Generate(TPMT_HA *digest,		/* largest size of a digest */
     return rc;
 }
 
-/* TSS_GetDigestSize() returns the digest size in bytes based on the hash algorithm.
+
+/* TSS_GetDigestBlockSize() returns the digest block size in bytes based on the hash algorithm.
 
    Returns 0 for an unknown algorithm.
 */
 
-uint16_t TSS_GetDigestSize(TPM_ALG_ID hashAlg)
-{
-    uint16_t size;
-    
-    switch (hashAlg) {
-      case TPM_ALG_SHA1:
-	size = SHA1_DIGEST_SIZE;
-	break;
-      case TPM_ALG_SHA256:
-	size = SHA256_DIGEST_SIZE;
-	break;
-      case TPM_ALG_SHA384:
-	size = SHA384_DIGEST_SIZE;
-	break;
-      case TPM_ALG_SHA512:
-	size = SHA512_DIGEST_SIZE;
-	break;
-#if 0
-      case TPM_ALG_SM3_256:
-	size = SM3_256_DIGEST_SIZE;
-	break;
-#endif
-      default:
-	size = 0;
-    }
-    return size;
-}
+/* NOTE: Marked as const function in header */
 
 uint16_t TSS_GetDigestBlockSize(TPM_ALG_ID hashAlg)
 {
     uint16_t size;
     
     switch (hashAlg) {
-      case TPM_ALG_SHA1:
+#ifdef TPM_ALG_SHA1
+     case TPM_ALG_SHA1:
 	size = SHA1_BLOCK_SIZE;
 	break;
+#endif
+#ifdef TPM_ALG_SHA256	
       case TPM_ALG_SHA256:
 	size = SHA256_BLOCK_SIZE;
 	break;
-      case TPM_ALG_SHA384:
+#endif
+#ifdef TPM_ALG_SHA384
+     case TPM_ALG_SHA384:
 	size = SHA384_BLOCK_SIZE;
 	break;
-#if 0
+#endif
+#ifdef TPM_ALG_SHA512
       case TPM_ALG_SHA512:
 	size = SHA512_BLOCK_SIZE;
 	break;
+#endif
+#if 0
       case TPM_ALG_SM3_256:
 	size = SM3_256_BLOCK_SIZE;
 	break;
@@ -337,7 +313,6 @@ uint16_t TSS_GetDigestBlockSize(TPM_ALG_ID hashAlg)
     }
     return size;
 }
-
 
 /* TPM_MGF1() generates an MGF1 'array' of length 'arrayLen' from 'seed' of length 'seedlen'
 
@@ -470,12 +445,12 @@ TPM_RC TSS_RSA_padding_add_PKCS1_OAEP(unsigned char *em, uint32_t emLen,
 {	
     TPM_RC		rc = 0;
     TPMT_HA 		lHash;
-    unsigned char 	*db;
+    unsigned char 	*db = NULL;		/* compiler false positive */
     
     unsigned char *dbMask = NULL;			/* freed @1 */
     unsigned char *seed = NULL;				/* freed @2 */
     unsigned char *maskedDb;
-    unsigned char *seedMask;
+    unsigned char *seedMask = NULL;		/* compiler false positive */
     unsigned char *maskedSeed;
 
     uint16_t hlen = TSS_GetDigestSize(halg);
@@ -587,6 +562,12 @@ void TSS_XOR(unsigned char *out,
 */
 
 #define TSS_AES_KEY_BITS 128
+
+/* TSS_Sym_GetBlockSize() returns the block size for the symmetric algorithm.  Returns 0 on for an
+   unknown algorithm.
+*/
+
+/* NOTE: Marked as const function in header */
 
 uint16_t TSS_Sym_GetBlockSize(TPM_ALG_ID	symmetricAlg, 
 			      uint16_t		keySizeInBits)

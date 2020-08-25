@@ -3,9 +3,8 @@
 #		Linux TPM 1.2 TSS and TPM 2.0 TSS and Utilities Makefile	#
 #			     Written by Ken Goldman				#
 #		       IBM Thomas J. Watson Research Center			#
-#	      $Id: makefile 1328 2018-09-04 15:08:15Z kgoldman $		#
 #										#
-# (c) Copyright IBM Corporation 2018						#
+# (c) Copyright IBM Corporation 2018 - 2020					#
 # 										#
 # All rights reserved.								#
 # 										#
@@ -101,12 +100,12 @@ LNLLIBS += -lcrypto
 # hardening flags for linking executables
 LNAFLAGS += -pie -Wl,-z,now -Wl,-rpath,.
 
-LNALIBS +=  -libmtssutils -libmtss -lcrypto
+LNALIBS +=  -libmtssutils -libmtss
 
 # shared library
 
 # versioned shared library
-LIBTSSVERSIONED=libibmtss.so.1.1
+LIBTSSVERSIONED=libibmtss.so.1.5
 
 # soname field of the shared library
 # which will be made symbolic link to the versioned shared library
@@ -114,7 +113,7 @@ LIBTSSVERSIONED=libibmtss.so.1.1
 LIBTSSSONAME=libibmtss.so.1
 
 # symbolic link to the versioned shared library
-# this allows linking to the shared library with '-libmtss' 
+# this allows linking to the shared library with '-libmtss'
 
 os := $(shell uname -o)
 ifeq ($(os),Cygwin)
@@ -125,7 +124,7 @@ endif
 
 # TSS utilities shared library
 
-LIBTSSUTILSVERSIONED=libibmtssutils.so.1.1
+LIBTSSUTILSVERSIONED=libibmtssutils.so.1.5
 LIBTSSUTILSSONAME=libibmtssutils.so.1
 LIBTSSUTILS=libibmtssutils.so
 
@@ -133,7 +132,7 @@ LIBTSSUTILS=libibmtssutils.so
 
 EXE =
 
-# 
+#
 
 
 TSS_HEADERS=
@@ -250,7 +249,8 @@ $(LIBTSS): 	$(TSS_OBJS)
 # TSS utilities shared library
 
 $(LIBTSSUTILS):	$(TSSUTILS_OBJS)
-		$(CC) $(LNFLAGS) $(LNLFLAGS) -Wl,-soname,$(LIBTSSUTILSSONAME) -o $(LIBTSSUTILSVERSIONED) $(TSSUTILS_OBJS) $(LNLLIBS)
+		$(CC) $(LNFLAGS) $(LNLFLAGS) -Wl,-soname,$(LIBTSSUTILSSONAME) -o $(LIBTSSUTILSVERSIONED) \
+			$(TSSUTILS_OBJS) $(LNLLIBS)
 		rm -f $(LIBTSSSUTILSONAME)
 		ln -sf $(LIBTSSUTILSVERSIONED) $(LIBTSSUTILSSONAME)
 		rm -f $(LIBTSSUTILS)
@@ -259,7 +259,7 @@ $(LIBTSSUTILS):	$(TSSUTILS_OBJS)
 .PHONY:		clean
 .PRECIOUS:	%.o
 
-clean:		
+clean:
 		rm -f *.o  *~ 		\
 		h*.bin			\
 		$(LIBTSSSONAME)		\
@@ -273,13 +273,15 @@ clean:
 activatecredential:	ibmtss/tss.h activatecredential.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) activatecredential.o $(LNALIBS) -o activatecredential
 eventextend:		eventextend.o eventlib.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) eventextend.o eventlib.o $(LNALIBS) -o eventextend
+			$(CC) $(LNFLAGS) $(LNAFLAGS) eventextend.o $(LNALIBS) -o eventextend
 imaextend:		imaextend.o imalib.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) imaextend.o imalib.o $(LNALIBS) -o imaextend
+			$(CC) $(LNFLAGS) $(LNAFLAGS) imaextend.o $(LNALIBS) -o imaextend
 certify:		ibmtss/tss.h certify.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) certify.o $(LNALIBS) -o certify
 certifycreation:	ibmtss/tss.h certifycreation.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) certifycreation.o $(LNALIBS) -o certifycreation
+certifyx509:		ibmtss/tss.h certifyx509.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) certifyx509.o $(LNALIBS) -lcrypto -o certifyx509
 changeeps:		ibmtss/tss.h changeeps.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) changeeps.o $(LNALIBS) -o changeeps
 changepps:		ibmtss/tss.h changepps.o $(LIBTSS) $(LIBTSSUTILS)
@@ -309,17 +311,17 @@ dictionaryattacklockreset:		ibmtss/tss.h dictionaryattacklockreset.o $(LIBTSS) $
 dictionaryattackparameters:		ibmtss/tss.h dictionaryattackparameters.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) dictionaryattackparameters.o $(LNALIBS) -o dictionaryattackparameters
 duplicate:		ibmtss/tss.h duplicate.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) duplicate.o $(LNALIBS) -o duplicate 
+			$(CC) $(LNFLAGS) $(LNAFLAGS) duplicate.o $(LNALIBS) -o duplicate
 eccparameters:		ibmtss/tss.h eccparameters.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) eccparameters.o $(LNALIBS) -o eccparameters 
+			$(CC) $(LNFLAGS) $(LNAFLAGS) eccparameters.o $(LNALIBS) -o eccparameters
 ecephemeral:		ibmtss/tss.h ecephemeral.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) ecephemeral.o $(LNALIBS) -o ecephemeral 
+			$(CC) $(LNFLAGS) $(LNAFLAGS) ecephemeral.o $(LNALIBS) -o ecephemeral
 encryptdecrypt:		ibmtss/tss.h encryptdecrypt.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) encryptdecrypt.o $(LNALIBS) -o encryptdecrypt	
+			$(CC) $(LNFLAGS) $(LNAFLAGS) encryptdecrypt.o $(LNALIBS) -o encryptdecrypt
 eventsequencecomplete:	ibmtss/tss.h eventsequencecomplete.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) eventsequencecomplete.o $(LNALIBS) -o eventsequencecomplete	
+			$(CC) $(LNFLAGS) $(LNAFLAGS) eventsequencecomplete.o $(LNALIBS) -o eventsequencecomplete
 evictcontrol:		ibmtss/tss.h evictcontrol.o $(LIBTSS) $(LIBTSSUTILS)
-			$(CC) $(LNFLAGS) $(LNAFLAGS) evictcontrol.o $(LNALIBS) -o evictcontrol	
+			$(CC) $(LNFLAGS) $(LNAFLAGS) evictcontrol.o $(LNALIBS) -o evictcontrol
 flushcontext:		ibmtss/tss.h flushcontext.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) flushcontext.o $(LNALIBS) -o flushcontext
 getcommandauditdigest:	ibmtss/tss.h getcommandauditdigest.o $(LIBTSS) $(LIBTSSUTILS)
@@ -460,6 +462,8 @@ sequencecomplete:	ibmtss/tss.h sequencecomplete.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) sequencecomplete.o $(LNALIBS) -o sequencecomplete
 setprimarypolicy:	ibmtss/tss.h setprimarypolicy.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) setprimarypolicy.o $(LNALIBS) -o setprimarypolicy
+setcommandcodeauditstatus:	ibmtss/tss.h setcommandcodeauditstatus.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) setcommandcodeauditstatus.o $(LNALIBS) -o setcommandcodeauditstatus
 shutdown:		ibmtss/tss.h shutdown.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) shutdown.o $(LNALIBS) -o shutdown
 sign:			ibmtss/tss.h sign.o $(LIBTSS) $(LIBTSSUTILS)
@@ -496,9 +500,16 @@ ntc2preconfig:		ntc2preconfig.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) ntc2preconfig.o $(LNALIBS) -o ntc2preconfig
 ntc2lockconfig:		ntc2lockconfig.o $(LIBTSS) $(LIBTSSUTILS)
 			$(CC) $(LNFLAGS) $(LNAFLAGS) ntc2lockconfig.o $(LNALIBS) -o ntc2lockconfig
+publicname:		publicname.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) publicname.o $(LNALIBS) -o publicname
+getcryptolibrary:	getcryptolibrary.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) getcryptolibrary.o $(LNALIBS) -o getcryptolibrary
+printattr:		printattr.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) printattr.o $(LNALIBS) -o printattr
+tpmcmd:			tpmcmd.o $(LIBTSS) $(LIBTSSUTILS)
+			$(CC) $(LNFLAGS) $(LNAFLAGS) tpmcmd.o $(LNALIBS) -o tpmcmd
 
 # for applications, not for TSS library
 
-%.o:		%.c ibmtss/tss.h 
+%.o:		%.c ibmtss/tss.h
 		$(CC) $(CCFLAGS) $(CCAFLAGS) $< -o $@
-

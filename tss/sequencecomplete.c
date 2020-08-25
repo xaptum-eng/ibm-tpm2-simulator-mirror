@@ -3,9 +3,8 @@
 /*			    SequenceComplete					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: sequencecomplete.c 1294 2018-08-09 19:08:34Z kgoldman $	*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2019.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -53,7 +52,7 @@
 
 static void printUsage(void);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -81,7 +80,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-hi") == 0) {
 	    i++;
@@ -213,7 +213,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -246,7 +246,7 @@ int main(int argc, char *argv[])
 	printUsage();
     }
     if ((rc == 0) && (inFilename != NULL)) {
-	rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 				     &length,
 				     inFilename);
     }
@@ -262,9 +262,11 @@ int main(int argc, char *argv[])
 
 	/* data for update */
 	in.buffer.t.size = (uint16_t)length;
-	memcpy(in.buffer.t.buffer, buffer, length);
+	if (length > 0) {
+	    memcpy(in.buffer.t.buffer, buffer, length);
+	}
     }
-    free(buffer);
+    free(buffer);	/* @1 */
     /* Start a TSS context */
     if (rc == 0) {
 	rc = TSS_Create(&tssContext);
@@ -294,12 +296,12 @@ int main(int argc, char *argv[])
     }    
     if ((rc == 0) && (ticketFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.validation,
-				     (MarshalFunction_t)TSS_TPMT_TK_HASHCHECK_Marshal,
+				     (MarshalFunction_t)TSS_TPMT_TK_HASHCHECK_Marshalu,
 				     ticketFilename);
     }
     if (rc == 0) {
-	if (verbose) TSS_PrintAll("Result", out.result.t.buffer, out.result.t.size);
-	if (verbose) printf("sequencecomplete: success\n");
+	if (tssUtilsVerbose) TSS_PrintAll("Result", out.result.t.buffer, out.result.t.size);
+	if (tssUtilsVerbose) printf("sequencecomplete: success\n");
     }
     else {
 	const char *msg;

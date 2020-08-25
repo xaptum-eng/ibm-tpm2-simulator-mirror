@@ -3,9 +3,8 @@
 /*			    TSS and Application File Utilities			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*		$Id: tssfile.c 1324 2018-08-31 16:36:12Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018					*/
+/* (c) Copyright IBM Corporation 2015 - 2019					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -200,7 +199,7 @@ TPM_RC TSS_File_ReadStructure(void 			*structure,
     size_t 	length = 0;
 
     if (rc == 0) {
-	rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 				     &length,
 				     filename);
     }
@@ -209,9 +208,17 @@ TPM_RC TSS_File_ReadStructure(void 			*structure,
 	buffer1 = buffer;
 	rc = unmarshalFunction(structure, &buffer1, &ilength);
     }
-    free(buffer);
+    free(buffer);	/* @1 */
     return rc;
 }
+
+/* TSS_File_ReadStructureFlag() is a general purpose "read a structure" function.
+
+   It reads the filename, and then unmarshals the structure using "unmarshalFunction".
+
+   It is similar to TSS_File_ReadStructure() but is used when the structure unmarshal function
+   requires the allowNull flag.
+*/
 
 TPM_RC TSS_File_ReadStructureFlag(void 				*structure,
 				  UnmarshalFunctionFlag_t 	unmarshalFunction,
@@ -224,7 +231,7 @@ TPM_RC TSS_File_ReadStructureFlag(void 				*structure,
     size_t 	length = 0;
 
     if (rc == 0) {
-	rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 				     &length,
 				     filename);
     }
@@ -233,7 +240,7 @@ TPM_RC TSS_File_ReadStructureFlag(void 				*structure,
 	buffer1 = buffer;
 	rc = unmarshalFunction(structure, &buffer1, &ilength, allowNull);
     }
-    free(buffer);
+    free(buffer);	/* @1 */
     return rc;
 }
 
@@ -278,7 +285,7 @@ TPM_RC TSS_File_Read2B(TPM2B 		*tpm2b,
     size_t 	length = 0;
     
     if (rc == 0) {
-	rc = TSS_File_ReadBinaryFile(&buffer,     /* must be freed by caller */
+	rc = TSS_File_ReadBinaryFile(&buffer,     /* freed @1 */
 				     &length,
 				     filename);
     }
@@ -293,7 +300,7 @@ TPM_RC TSS_File_Read2B(TPM2B 		*tpm2b,
     if (rc == 0) {
 	rc = TSS_TPM2B_Create(tpm2b, buffer, (uint16_t)length, targetSize);
     }
-    free(buffer);
+    free(buffer);	/* @1 */
     return rc;
 }
 

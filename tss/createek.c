@@ -3,9 +3,8 @@
 /*			     IWG EK Index Parsing				*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: createek.c 1304 2018-08-20 18:31:45Z kgoldman $		*/
 /*										*/
-/* (c) Copyright IBM Corporation 2015 - 2018.					*/
+/* (c) Copyright IBM Corporation 2015 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -64,8 +63,12 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <openssl/x509.h>
-#include <openssl/bn.h>
+/* Windows 10 crypto API clashes with openssl */
+#ifdef TPM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
 
 #include <ibmtss/tss.h>
 #include <ibmtss/tssutils.h>
@@ -85,10 +88,17 @@ static void printUsage(void);
 #define EKCertType		3
 #define CreateprimaryType	4
 
+/* RSA or ECC algorithm */
+
 #define AlgRSA			1
 #define AlgEC			2
 
-int verbose = FALSE;
+/* EK on low or high range, EK spec 2.3 */
+
+#define LowRange	1
+#define HighRange	2
+
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -99,8 +109,13 @@ int main(int argc, char *argv[])
     int				inputType = 0;
     const char 			*listFilename = NULL;
     unsigned int		inputCount = 0;
-    unsigned int		algType = 0;
+    unsigned int		algCount = 0;
+    int				range = LowRange;	/* default low range */
+    TPMI_ALG_PUBLIC 		algPublic = 0;
+    TPMI_RSA_KEY_BITS 		keyBits = 0;
     /* initialized to suppress false gcc -O3 warning */
+    const char			*endorsementPassword = NULL; 
+    const char			*keyPassword = NULL; 
     TPMI_RH_NV_INDEX		ekCertIndex = 0;
     TPMI_RH_NV_INDEX		ekNonceIndex = 0;
     TPMI_RH_NV_INDEX		ekTemplateIndex = 0;
@@ -109,7 +124,7 @@ int main(int argc, char *argv[])
     unsigned int		rootFileCount = 0;
     unsigned char 		*nonce = NULL; 		/* freed @1 */
     uint16_t 			nonceSize;
-    X509 			*ekCertificate = NULL;
+    void 			*ekCertificate = NULL;
     uint8_t 			*modulusBin = NULL;
     int				modulusBytes;
     unsigned int 		noFlush = 0;		/* default flush after validation */
@@ -117,7 +132,8 @@ int main(int argc, char *argv[])
     
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* for free */
     for (i = 0 ; i < MAX_ROOTS ; i++) {
 	rootFilename[i] = NULL;
@@ -140,6 +156,33 @@ int main(int argc, char *argv[])
 	    inputType = CreateprimaryType;
 	    inputCount++;
 	}
+	else if (strcmp(argv[i],"-pwde") == 0) {
+	    i++;
+	    if (i < argc) {
+		endorsementPassword = argv[i];
+	    }
+	    else {
+		printf("-pwde option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i],"-pwdk") == 0) {
+	    i++;
+	    if (i < argc) {
+		keyPassword = argv[i];
+	    }
+	    else {
+		printf("-pwdk option needs a value\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i],"-high") == 0) {
+	    range = HighRange;
+	    if (algPublic != 0) {
+		printf("-high must be specified before -rsa or -ecc\n");
+		printUsage();
+	    }
+	}
 	else if (strcmp(argv[i],"-root") == 0) {
 	    i++;
 	    if (i < argc) {
@@ -150,28 +193,67 @@ int main(int argc, char *argv[])
 		printUsage();
 	    }
 	}
-	else if (strcmp(argv[i],"-alg") == 0) {
+	else if (strcmp(argv[i], "-rsa") == 0) {
+	    algPublic = TPM_ALG_RSA;
+	    algCount++;
 	    i++;
 	    if (i < argc) {
-		if (strcmp(argv[i],"rsa") == 0) {
-		    algType = AlgRSA;
-		    ekCertIndex = EK_CERT_RSA_INDEX;
-		    ekNonceIndex = EK_NONCE_RSA_INDEX;
-		    ekTemplateIndex = EK_TEMPLATE_RSA_INDEX;
-		}
-		else if (strcmp(argv[i],"ecc") == 0) {
-		    algType = AlgEC;
-		    ekCertIndex = EK_CERT_EC_INDEX;
-		    ekNonceIndex = EK_NONCE_EC_INDEX;
-		    ekTemplateIndex = EK_TEMPLATE_EC_INDEX;
-		}
-		else {
-		    printf("Bad parameter %s for -alg\n", argv[i]);
+		sscanf(argv[i],"%hu", &keyBits);
+		switch (keyBits) {
+		  case 2048:
+		    if (range == LowRange) {
+			ekCertIndex = EK_CERT_RSA_INDEX;
+			ekNonceIndex = EK_NONCE_RSA_INDEX;
+			ekTemplateIndex = EK_TEMPLATE_RSA_INDEX;
+		    }
+		    else {	/* high range */
+			ekCertIndex = EK_CERT_RSA_2048_INDEX_H1;
+		    }
+		    break;
+		  case 3072:
+		    ekCertIndex = EK_CERT_RSA_3072_INDEX_H6;
+		    break;
+		  case 4096:
+		    ekCertIndex = EK_CERT_RSA_4096_INDEX_H7;
+		    break;
+		  default:
+		    printf("Bad key size %s for -rsa\n", argv[i]);
 		    printUsage();
 		}
 	    }
 	    else {
-		printf("-alg option needs a value\n");
+		printf("Missing keysize parameter for -rsa\n");
+		printUsage();
+	    }
+	}
+	else if (strcmp(argv[i], "-ecc") == 0) {
+	    algPublic = TPM_ALG_ECC;
+	    algCount++;
+	    i++;
+	    if (i < argc) {
+		if (strcmp(argv[i],"nistp256") == 0) {
+		    if (range == LowRange) {
+			ekCertIndex = EK_CERT_EC_INDEX;
+			ekNonceIndex = EK_NONCE_EC_INDEX;
+			ekTemplateIndex = EK_TEMPLATE_EC_INDEX;
+		    }
+		    else {	/* high range */
+			ekCertIndex = EK_CERT_ECC_NISTP256_INDEX_H2;
+		    }
+		}
+		else if (strcmp(argv[i],"nistp384") == 0) {
+		    ekCertIndex = EK_CERT_ECC_NISTP384_INDEX_H3;
+		}
+		else if (strcmp(argv[i],"nistp521") == 0) {
+		    ekCertIndex = EK_CERT_ECC_NISTP521_INDEX_H4;
+		}
+		else {
+		    printf("Bad curve parameter %s for -ecc\n", argv[i]);
+		    printUsage();
+		}
+	    }
+	    else {
+		printf("-ecc option needs a value\n");
 		printUsage();
 	    }
 	}
@@ -182,7 +264,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -194,12 +276,16 @@ int main(int argc, char *argv[])
 	printf("Only one of -te, -no, -ce can be specified\n");
 	printUsage();
     }
-    if ((inputCount == 0) && (listFilename == NULL)) {
-	printf("Nothing to do\n");
+    if (algCount == 0) {
+	printf("One of -rsa, -ecc must be specified\n");
 	printUsage();
     }
-    if (algType == 0) {
-	printf("-alg must be specified\n");
+    if (algCount > 1) {
+	printf("Only one of -rsa, -ecc can be specified\n");
+	printUsage();
+    }
+    if ((inputCount == 0) && (listFilename == NULL)) {
+	printf("Nothing to do\n");
 	printUsage();
     }
     /* Start a TSS context */
@@ -209,15 +295,29 @@ int main(int argc, char *argv[])
     if (rc == 0) {
 	switch (inputType) {
 	  case EKTemplateType:
-	    rc = processEKTemplate(tssContext, &tpmtPublic, ekTemplateIndex, TRUE);
+	    if (rc == 0) {
+		if (ekTemplateIndex == 0) {
+		    rc = TSS_RC_X509_ERROR;
+		}
+	    }
+	    if (rc == 0) {
+		rc = processEKTemplate(tssContext, &tpmtPublic, ekTemplateIndex, TRUE);
+	    }
 	    if (rc != 0) {
-		printf("No EK template\n");
+		printf("No EK template for EK certifcate index %08x\n", ekCertIndex);
 	    }
 	    break;
 	  case EKNonceType:
-	    rc = processEKNonce(tssContext, &nonce, &nonceSize, ekNonceIndex, TRUE);
+	    if (rc == 0) {
+		if (ekNonceIndex == 0) {
+		    rc = TSS_RC_X509_ERROR;
+		}
+	    }
+	    if (rc == 0) {
+		rc = processEKNonce(tssContext, &nonce, &nonceSize, ekNonceIndex, TRUE);
+	    }
 	    if (rc != 0) {
-		printf("No EK nonce\n");
+		printf("No EK nonce for EK certifcate index %08x\n", ekCertIndex);
 	    }
 	    break;
 	  case EKCertType:
@@ -228,9 +328,11 @@ int main(int argc, char *argv[])
 				      TRUE);		/* print the EK certificate */
 	    break;
 	  case CreateprimaryType:
-	    rc = processPrimary(tssContext, &keyHandle,
-				ekCertIndex, ekNonceIndex, ekTemplateIndex,
-				noFlush, TRUE);
+	    rc = processPrimaryE(tssContext, &keyHandle,
+				 endorsementPassword, keyPassword,
+				 ekCertIndex,
+				 ekNonceIndex, ekTemplateIndex,
+				 noFlush, TRUE);
 	    break;
 	}
     }
@@ -239,14 +341,14 @@ int main(int argc, char *argv[])
 	    rc = getRootCertificateFilenames(rootFilename,	/* freed @4 */
 					     &rootFileCount,
 					     listFilename,
-					     verbose);
+					     tssUtilsVerbose);
 	}
 	if (rc == 0) {
 	    rc = processRoot(tssContext,
 			     ekCertIndex,
 			     (const char **)rootFilename,
 			     rootFileCount,
-			     TRUE); 
+			     TRUE);
 	}
     }
     if ((rc == 0) && noFlush && (inputType == CreateprimaryType)) {
@@ -258,10 +360,17 @@ int main(int argc, char *argv[])
 	    rc = rc1;
 	}
     }
-    free(nonce);			/* @1 */
-    if (ekCertificate != NULL) {
-	X509_free(ekCertificate);   	/* @2 */
+    if (rc != 0) {
+	const char *msg;
+	const char *submsg;
+	const char *num;
+	printf("createek: failed, rc %08x\n", rc);
+	TSS_ResponseCode_toString(&msg, &submsg, &num, rc);
+	printf("%s%s%s\n", msg, submsg, num);
+	rc = EXIT_FAILURE;
     }
+    free(nonce);			/* @1 */
+    x509FreeStructure(ekCertificate);  	/* @2 */
     free(modulusBin);			/* @3 */
     for (ui = 0 ; ui < rootFileCount ; ui++) {
 	free(rootFilename[ui]);		/* @4 */
@@ -275,8 +384,20 @@ static void printUsage(void)
     printf("createek\n");
     printf("\n");
     printf("Parses and prints the various EK NV indexes specified by the IWG\n");
-    printf("Creates a primary key based on the EK NV indexes\n");
+    printf("Creates an EK primary key based on the EK NV indexes\n");
     printf("\n");
+    printf("\t[-pwde\t\tendorsement hierarchy password (default empty)]\n");
+    printf("\t[-pwdk\t\tpassword for endorsement key (default empty)]");
+    printf("\n");
+    printf("\t[-high\t\tUse the IWG NV high range. Specify before algorithm]\n");
+    printf("\t-rsa keybits\n");
+    printf("\t\t2048\n");
+    printf("\t\t3072\n");
+    printf("\t\t4096\n");
+    printf("\t-ecc curve\n");
+    printf("\t\tnistp256\n");
+    printf("\t\tnistp384\n");
+    printf("\t\tnistp521\n");
     printf("\t-te\tprint EK Template \n");
     printf("\t-no\tprint EK nonce \n");
     printf("\t-ce\tprint EK certificate \n");
@@ -287,6 +408,5 @@ static void printUsage(void)
     printf("\t\tfilename contains a list of PEM format CA root certificate\n"
 	   "\t\tfilenames, one per line.\n");
     printf("\t\tThe list may contain up to %u certificates.\n", MAX_ROOTS);
-    printf("\t-alg (rsa or ecc) \n");
-    exit(1);	
+    exit(1);
 }

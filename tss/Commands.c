@@ -1,9 +1,8 @@
 /********************************************************************************/
 /*										*/
-/*			     				*/
+/*			  Command Parameter Unmarshaling			*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*            $Id: Commands.c 1285 2018-07-27 18:33:41Z kgoldman $		*/
 /*										*/
 /*  Licenses and Notices							*/
 /*										*/
@@ -55,19 +54,22 @@
 /*    arising in any way out of use or reliance upon this specification or any 	*/
 /*    information herein.							*/
 /*										*/
-/*  (c) Copyright IBM Corp. and others, 2012-2017				*/
+/*  (c) Copyright IBM Corp. and others, 2012 - 2019				*/
 /*										*/
 /********************************************************************************/
 
-/* rev 119 */
+/* The TSS using the command parameter unmarshaling to validate caller input parameters before
+   sending them to the TPM.
+
+   It is essentially the same as the TPM side code.
+*/
 
 #include "Commands_fp.h"
 #include <ibmtss/Parameters.h>
 
 #include <ibmtss/Unmarshal_fp.h>
 
-COMMAND_PARAMETERS in;
-RESPONSE_PARAMETERS out;
+#ifndef TPM_TSS_NOCMDCHECK
 
 /*
   In_Unmarshal - shared by TPM and TSS
@@ -853,6 +855,35 @@ Certify_In_Unmarshal(Certify_In *target, BYTE **buffer, uint32_t *size, TPM_HAND
 	rc = TSS_TPMT_SIG_SCHEME_Unmarshalu(&target->inScheme, buffer, size, YES);
 	if (rc != TPM_RC_SUCCESS) {
 	    rc += RC_Certify_inScheme;
+	}
+    }
+    return rc;
+}
+TPM_RC
+CertifyX509_In_Unmarshal(CertifyX509_In *target, BYTE **buffer, uint32_t *size, TPM_HANDLE handles[])
+{
+    TPM_RC rc = TPM_RC_SUCCESS;
+
+    if (rc == TPM_RC_SUCCESS) {
+	target->objectHandle = handles[0];
+	target->signHandle = handles[1];
+    }
+    if (rc == TPM_RC_SUCCESS) {
+	rc = TSS_TPM2B_DATA_Unmarshalu(&target->reserved, buffer, size);
+	if (rc != TPM_RC_SUCCESS) {
+	    rc += RC_CertifyX509_reserved;
+	}
+    }
+    if (rc == TPM_RC_SUCCESS) {
+	rc = TSS_TPMT_SIG_SCHEME_Unmarshalu(&target->inScheme, buffer, size, YES);
+	if (rc != TPM_RC_SUCCESS) {
+	    rc += RC_CertifyX509_inScheme;
+	}
+    }
+    if (rc == TPM_RC_SUCCESS) {
+	rc = TSS_TPM2B_MAX_BUFFER_Unmarshalu(&target->partialCertificate, buffer, size);
+	if (rc != TPM_RC_SUCCESS) {
+	    rc += RC_CertifyX509_partialCertificate;
 	}
     }
     return rc;
@@ -2259,3 +2290,5 @@ NV_Certify_In_Unmarshal(NV_Certify_In *target, BYTE **buffer, uint32_t *size, TP
     }
     return rc;
 }
+
+#endif /* TPM_TSS_NOCMDCHECK */

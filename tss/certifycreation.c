@@ -3,9 +3,8 @@
 /*			    CertifyCreation					*/
 /*			     Written by Ken Goldman				*/
 /*		       IBM Thomas J. Watson Research Center			*/
-/*	      $Id: certifycreation.c 1294 2018-08-09 19:08:34Z kgoldman $	*/
 /*										*/
-/* (c) Copyright IBM Corporation 2017 - 2018.					*/
+/* (c) Copyright IBM Corporation 2017 - 2020.					*/
 /*										*/
 /* All rights reserved.								*/
 /* 										*/
@@ -53,9 +52,8 @@
 #include <ibmtss/Unmarshal_fp.h>
 
 static void printUsage(void);
-static void printSignature(CertifyCreation_Out *out);
 
-int verbose = FALSE;
+extern int tssUtilsVerbose;
 
 int main(int argc, char *argv[])
 {
@@ -86,7 +84,8 @@ int main(int argc, char *argv[])
 
     setvbuf(stdout, 0, _IONBF, 0);      /* output may be going through pipe to log file */
     TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "1");
-
+    tssUtilsVerbose = FALSE;
+    
     /* command line argument defaults */
     for (i=1 ; (i<argc) && (rc == 0) ; i++) {
 	if (strcmp(argv[i],"-ho") == 0) {
@@ -280,7 +279,7 @@ int main(int argc, char *argv[])
 	    printUsage();
 	}
 	else if (strcmp(argv[i],"-v") == 0) {
-	    verbose = TRUE;
+	    tssUtilsVerbose = TRUE;
 	    TSS_SetProperty(NULL, TPM_TRACE_LEVEL, "2");
 	}
 	else {
@@ -352,7 +351,7 @@ int main(int argc, char *argv[])
 	}
     }
     if (rc == 0) {
-	in.creationHash.t.size = length;
+	in.creationHash.t.size = (uint16_t)length;
 	memcpy(in.creationHash.t.buffer, buffer, length);
     }
     /* Start a TSS context */
@@ -383,6 +382,9 @@ int main(int argc, char *argv[])
 	rc = TSS_TPMS_ATTEST_Unmarshalu(&tpmsAttest, &tmpBuffer, &tmpSize);
     }
     if (rc == 0) {
+	if (tssUtilsVerbose) TSS_TPMS_ATTEST_Print(&tpmsAttest, 0);
+    }
+    if (rc == 0) {
 	int match;
 	match = TSS_TPM2B_Compare(&in.qualifyingData.b, &tpmsAttest.extraData.b);
 	if (!match) {
@@ -398,12 +400,9 @@ int main(int argc, char *argv[])
 	    rc = EXIT_FAILURE;
 	}
     }
-    if (rc == 0) {
-	if (verbose) TSS_TPMS_ATTEST_Print(&tpmsAttest, 0);
-    }
     if ((rc == 0) && (signatureFilename != NULL)) {
 	rc = TSS_File_WriteStructure(&out.signature,
-				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshal,
+				     (MarshalFunction_t)TSS_TPMT_SIGNATURE_Marshalu,
 				     signatureFilename);
     }
     if ((rc == 0) && (attestInfoFilename != NULL)) {
@@ -412,8 +411,8 @@ int main(int argc, char *argv[])
 				      attestInfoFilename);
     }
     if (rc == 0) {
-	if (verbose) printSignature(&out);
-	if (verbose) printf("certifycreation: success\n");
+	if (tssUtilsVerbose) TSS_TPMT_SIGNATURE_Print(&out.signature, 0);
+	if (tssUtilsVerbose) printf("certifycreation: success\n");
     }
     else {
 	const char *msg;
@@ -426,13 +425,6 @@ int main(int argc, char *argv[])
     }
     free(buffer);	/* @1 */
     return rc;
-}
-
-static void printSignature(CertifyCreation_Out *out)
-{
-    TSS_PrintAll("Signature",
-		 out->signature.signature.rsassa.sig.t.buffer,
-		 out->signature.signature.rsassa.sig.t.size);
 }
 
 static void printUsage(void)
